@@ -21,20 +21,21 @@ options:
   timezone: America/New_York
   pump_hours: 2
   notify_targets: []
-  database_url: ""
   mqtt_host: ""
   mqtt_port: 1883
   mqtt_username: ""
   mqtt_password: ""
+  database_url: ""
 schema:
   timezone: str
   pump_hours: float
   notify_targets:
     - str
-  database_url: str?
   # MQTT broker — leave blank to auto-discover the Mosquitto add-on; set these
   # to point at an EXTERNAL broker (e.g. EMQX on another host).
   mqtt_host: str?
   mqtt_port: port
   mqtt_username: str?
   mqtt_password: password?
+  # Optional advanced override — leave blank to use the built-in SQLite store.
+  database_url: str?
