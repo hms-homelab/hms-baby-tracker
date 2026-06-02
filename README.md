@@ -15,6 +15,9 @@ No n8n, no external database. Pairs with the ESP32 button remote from the
   <img src="images/dashboard.png" alt="Baby Tracker dashboard — summary stats and one-tap event buttons" width="340">
 </p>
 
+> **🎛️ Want the physical button remote?** The 3D-printed ESP32 remote that drives
+> this dashboard is built in small batches — **[join the waitlist →](https://shmaestro.com/waitlist)**.
+
 ## Features
 
 - **One-tap logging** of 17 event types across 8 categories (feed/pump/diaper/
