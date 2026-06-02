@@ -16,7 +16,7 @@ No n8n, no external database. Pairs with the ESP32 button remote from the
 </p>
 
 > **🎛️ Want the physical button remote?** The 3D-printed ESP32 remote that drives
-> this dashboard is built in small batches — **[join the waitlist →](https://shmaestro.com/waitlist)**.
+> this dashboard is built in small batches — **[join the waitlist →](https://www.shmaestro.com/waitlist)**.
 
 ## Features
 
