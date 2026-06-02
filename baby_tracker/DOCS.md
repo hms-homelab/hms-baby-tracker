@@ -34,6 +34,10 @@ automations. Stats are exposed back to Home Assistant as native entities.
 | `pump_hours`     | float           | `2`                | Hours after a pump event before a pump reminder is fired.                                   |
 | `notify_targets` | list of strings | `[]`               | Home Assistant `notify` service names (without the `notify.` prefix) to send alerts to.     |
 | `database_url`   | string (opt.)   | `""`               | Optional external database URL. Leave empty to use the built-in SQLite store under `/data`. |
+| `mqtt_host`      | string (opt.)   | `""`               | MQTT broker host. **Leave blank to auto-discover the Mosquitto add-on**; set it (e.g. `192.168.1.15`) to point at an **external broker** like EMQX on another host. |
+| `mqtt_port`      | port            | `1883`             | MQTT broker port. |
+| `mqtt_username`  | string (opt.)   | `""`               | MQTT username (if your broker requires auth). |
+| `mqtt_password`  | password (opt.) | `""`               | MQTT password (if your broker requires auth). |
 
 MQTT host, port, username and password are **not** configured here — they are
 supplied automatically by the Supervisor through the `mqtt` service discovery

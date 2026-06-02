@@ -14,7 +14,7 @@ panel_title: Baby Tracker
 hassio_api: true
 homeassistant_api: true
 services:
-  - mqtt:need
+  - mqtt:want
 map:
   - addon_config:rw
 options:
@@ -22,9 +22,19 @@ options:
   pump_hours: 2
   notify_targets: []
   database_url: ""
+  mqtt_host: ""
+  mqtt_port: 1883
+  mqtt_username: ""
+  mqtt_password: ""
 schema:
   timezone: str
   pump_hours: float
   notify_targets:
     - str
   database_url: str?
+  # MQTT broker — leave blank to auto-discover the Mosquitto add-on; set these
+  # to point at an EXTERNAL broker (e.g. EMQX on another host).
+  mqtt_host: str?
+  mqtt_port: port
+  mqtt_username: str?
+  mqtt_password: password?

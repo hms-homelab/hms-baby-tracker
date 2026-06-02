@@ -67,7 +67,10 @@ class MqttBridge:
 
     @property
     def enabled(self) -> bool:
-        return bool(self.cfg.mqtt_enabled and self.cfg.mqtt_host)
+        # Run whenever a broker host is known — from the add-on Configuration
+        # (external broker like EMQX) or auto-discovered Mosquitto. The host is
+        # the single source of truth; don't gate on a separate enabled flag.
+        return bool(self.cfg.mqtt_host)
 
     async def run(self) -> None:
         if not self.enabled:

@@ -3,67 +3,26 @@
 #
 # Baby Tracker add-on entrypoint.
 #
-# Reads user options from /data/options.json and the MQTT service credentials
-# discovered by the Supervisor, exports them as env vars (app/config.py reads
-# both /data/options.json AND the environment), then launches uvicorn.
+# All user options (timezone, pump_hours, notify_targets, database_url, and the
+# MQTT broker settings) are read by app/config.py directly from
+# /data/options.json — NO Supervisor API call, so no "forbidden"/403 noise.
 #
-# Falls back to a POSIX sh + jq path when bashio is unavailable (non-HA / dev).
+# The only thing we do here is a best-effort auto-discovery of the Mosquitto
+# add-on's MQTT service (for users who run it). It is fully guarded so that an
+# absent or forbidden services API stays silent. If you use an EXTERNAL broker
+# (e.g. EMQX on another host), just set mqtt_host in the add-on Configuration —
+# that takes precedence over auto-discovery.
 
 set -e
 
-# ---------------------------------------------------------------------------
-# bashio path (normal Home Assistant runtime)
-# ---------------------------------------------------------------------------
-if command -v bashio >/dev/null 2>&1 && bashio::supervisor.ping >/dev/null 2>&1; then
-
-    export TZ="$(bashio::config 'timezone')"
-    export PUMP_HOURS="$(bashio::config 'pump_hours')"
-    export DATABASE_URL="$(bashio::config 'database_url')"
-
-    # notify_targets is a list -> comma-join into NOTIFY_TARGETS
-    NOTIFY_TARGETS=""
-    for target in $(bashio::config 'notify_targets'); do
-        if [ -z "${NOTIFY_TARGETS}" ]; then
-            NOTIFY_TARGETS="${target}"
-        else
-            NOTIFY_TARGETS="${NOTIFY_TARGETS},${target}"
-        fi
-    done
-    export NOTIFY_TARGETS
-
-    # MQTT from the `mqtt:need` service discovery.
-    if bashio::services.available "mqtt"; then
-        export MQTT_HOST="$(bashio::services mqtt 'host')"
-        export MQTT_PORT="$(bashio::services mqtt 'port')"
-        export MQTT_USERNAME="$(bashio::services mqtt 'username')"
-        export MQTT_PASSWORD="$(bashio::services mqtt 'password')"
-        export MQTT_ENABLED=1
-        bashio::log.info "MQTT service available at ${MQTT_HOST}:${MQTT_PORT}"
-    else
-        export MQTT_ENABLED=0
-        bashio::log.warning "No MQTT service available; remote/notify bridge disabled"
-    fi
-
-    bashio::log.info "Starting Baby Tracker (TZ=${TZ}, pump_hours=${PUMP_HOURS})"
-
+if command -v bashio >/dev/null 2>&1 && bashio::services.available "mqtt" 2>/dev/null; then
+    export MQTT_HOST="$(bashio::services mqtt 'host' 2>/dev/null)"
+    export MQTT_PORT="$(bashio::services mqtt 'port' 2>/dev/null)"
+    export MQTT_USERNAME="$(bashio::services mqtt 'username' 2>/dev/null)"
+    export MQTT_PASSWORD="$(bashio::services mqtt 'password' 2>/dev/null)"
+    echo "[baby-tracker] auto-discovered Mosquitto MQTT at ${MQTT_HOST}:${MQTT_PORT}"
 else
-    # -----------------------------------------------------------------------
-    # POSIX fallback (no bashio): read /data/options.json with jq
-    # -----------------------------------------------------------------------
-    OPTIONS=/data/options.json
-    if [ -f "${OPTIONS}" ] && command -v jq >/dev/null 2>&1; then
-        export TZ="$(jq -r '.timezone // "America/New_York"' "${OPTIONS}")"
-        export PUMP_HOURS="$(jq -r '.pump_hours // 2' "${OPTIONS}")"
-        export DATABASE_URL="$(jq -r '.database_url // ""' "${OPTIONS}")"
-        export NOTIFY_TARGETS="$(jq -r '(.notify_targets // []) | join(",")' "${OPTIONS}")"
-    fi
-    # MQTT env may be injected by the Supervisor regardless.
-    if [ -n "${MQTT_HOST:-}" ]; then
-        export MQTT_ENABLED=1
-    else
-        export MQTT_ENABLED=0
-    fi
-    echo "Starting Baby Tracker (fallback mode, TZ=${TZ:-America/New_York})"
+    echo "[baby-tracker] no Mosquitto service; using mqtt_host from add-on options (if set)"
 fi
 
 cd /app
