@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <meta name="theme-color" content="#f7f7fa" />
+  <title>Baby Tracker</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <main class="wrap">
+    <header class="app-head">
+      <h1>👶 Baby Tracker</h1>
+      <span id="status" class="status" aria-live="polite"></span>
+    </header>
+
+    <!-- Summary card -->
+    <section class="card summary" id="summary" aria-label="Today's summary">
+      <div class="sum-line" id="sum-feed">🍼 Last feed: —</div>
+      <div class="sum-line" id="sum-diaper">🧷 Last diaper: —</div>
+      <div class="sum-line" id="sum-sleep">😴 Sleep today: 0h 0m | 🌙 Awake</div>
+      <div class="sum-line" id="sum-other">🫙 Pumps: 0 | 🛁 Baths: 0 | 💊 Medicine: 0 | 🤸 Tummy time: 0</div>
+    </section>
+
+    <!-- Button groups -->
+    <section class="card">
+      <h2 class="group-title">Feed</h2>
+      <div class="grid grid-3" id="grp-feed"></div>
+
+      <h2 class="group-title">Pump</h2>
+      <div class="grid grid-2" id="grp-pump"></div>
+
+      <h2 class="group-title">Diaper</h2>
+      <div class="grid grid-4" id="grp-diaper"></div>
+
+      <h2 class="group-title">Other</h2>
+      <div class="grid grid-4" id="grp-other"></div>
+    </section>
+
+    <!-- Notes -->
+    <section class="card notes">
+      <div class="note-row">
+        <input type="text" id="note-input" placeholder="Add a Note" autocomplete="off" />
+        <button class="btn-save" id="note-save">Save</button>
+      </div>
+      <div class="note-row">
+        <input type="text" id="special-input" placeholder="Special Note ⭐" autocomplete="off" />
+        <button class="btn-save btn-special" id="special-save">Save</button>
+      </div>
+    </section>
+
+    <!-- Journal -->
+    <section class="card journal">
+      <h2 class="group-title">Journal</h2>
+      <ul class="journal-list" id="journal"></ul>
+    </section>
+
+    <footer class="foot">
+      <button class="btn-reset" id="reset">Reset All</button>
+    </footer>
+  </main>
+
+  <script src="app.js"></script>
+</body>
+</html>
