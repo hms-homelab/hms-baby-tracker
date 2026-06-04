@@ -12,11 +12,18 @@ No n8n, no external database. Pairs with the ESP32 button remote from the
 [baby-tracker-suite](https://github.com/aamat09/baby-tracker-suite).
 
 <p align="center">
-  <img src="images/dashboard.png" alt="Baby Tracker dashboard — summary stats and one-tap event buttons" width="340">
+  <img src="images/dashboard.png" alt="Baby Tracker Ingress web UI — summary stats and one-tap event buttons" width="46%">
+  <img src="images/addon-info.png" alt="Baby Tracker running as a native Home Assistant add-on — Info page with Ingress, start-on-boot and resource usage" width="46%">
 </p>
+<p align="center"><em>One-tap Ingress web UI (left) — runs as a native Home Assistant add-on (right): Ingress, MQTT discovery, start-on-boot, ~1% RAM.</em></p>
 
 > **🎛️ Want the physical button remote?** The 3D-printed ESP32 remote that drives
 > this dashboard is built in small batches — **[join the waitlist →](https://www.shmaestro.com/waitlist)**.
+
+<p align="center">
+  <img src="images/device.png" alt="Assembled 3D-printed ESP32 baby remote with a printed sticky-label faceplate over 15 buttons" width="300">
+</p>
+<p align="center"><em>The physical remote — printed snap-fit case + a 1:1 sticky-label faceplate; 15 buttons → MQTT → this add-on.</em></p>
 
 ## Features
 
