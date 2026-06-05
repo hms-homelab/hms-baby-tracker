@@ -1,4 +1,4 @@
-# hms-baby-tracker
+# Baby Tracker — Home Assistant Add-on (+ ESP32 MQTT remote)
 
 [![Buy Me A Coffee](https://img.shields.io/badge/Buy%20Me%20A%20Coffee-support-%23FFDD00.svg?logo=buy-me-a-coffee)](https://www.buymeacoffee.com/aamat09)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
