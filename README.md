@@ -20,11 +20,6 @@ No n8n, no external database. Pairs with the ESP32 button remote from the
 > **🎛️ Want the physical button remote?** The 3D-printed ESP32 remote that drives
 > this dashboard is built in small batches — **[join the waitlist →](https://www.shmaestro.com/waitlist)**.
 
-<p align="center">
-  <img src="images/board.png" alt="Inside the baby remote — 3D-printed PCB substrate with 15 tactile switches, a tinned-wire matrix, and the ESP32-C3" width="270">
-  <img src="images/device.png" alt="Assembled 3D-printed ESP32 baby remote with a printed sticky-label faceplate" width="270">
-</p>
-<p align="center"><em>The physical remote, inside &amp; out — the wired 3D-printed board (left) + the snap-fit case with a 1:1 sticky-label faceplate (right); 15 buttons → MQTT → this add-on.</em></p>
 
 ## Features
 
