@@ -52,6 +52,29 @@ Requires an MQTT broker (e.g. the Mosquitto add-on) for the remote + native
 entities; credentials are auto-discovered via the `mqtt` service. Full reference:
 [`baby_tracker/DOCS.md`](baby_tracker/DOCS.md).
 
+## Run standalone (without Home Assistant)
+
+The same app ships as a plain Docker image — run it anywhere, no Supervisor:
+
+```bash
+# app + a Mosquitto broker for the ESP32 remote, data in ./data
+docker compose up -d        # -> http://localhost:8099
+```
+
+or a single container:
+
+```bash
+docker run -d -p 8099:8099 -v "$PWD/data:/data" \
+  -e TZ=America/New_York -e MQTT_HOST=192.168.1.10 \
+  ghcr.io/hms-homelab/baby-tracker:latest
+```
+
+Config is via **env vars** instead of HA options: `TZ`, `PUMP_HOURS`, `MQTT_HOST`,
+`MQTT_PORT`, `MQTT_USERNAME`, `MQTT_PASSWORD`, `DATABASE_URL`, `DATA_DIR`. Point
+the ESP32 remote's MQTT at the broker and presses log straight in. (HA `notify`
+targets only work when run as the add-on.) Images are multi-arch (amd64 + arm64)
+and published on tagged releases.
+
 ## Architecture
 
 ```

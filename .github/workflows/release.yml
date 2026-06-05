@@ -1,0 +1,90 @@
+name: Release images
+
+# Build + publish to ghcr.io ONLY when a version tag is pushed (or run manually).
+# Plain pushes to main do NOT build images.
+#   git tag v2026.1.0 && git push origin v2026.1.0
+on:
+  push:
+    tags: ["v*.*.*"]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to build & tag (e.g. 2026.1.0)"
+        required: true
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  version:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.v.outputs.version }}
+    steps:
+      - id: v
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "version=${{ github.event.inputs.version }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+          fi
+
+  # HA add-on images — one single-arch image per arch, named {arch}-baby-tracker
+  # so config.yaml `image: ghcr.io/hms-homelab/{arch}-baby-tracker` resolves.
+  addon:
+    needs: version
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - arch: aarch64
+            platform: linux/arm64
+            base: ghcr.io/home-assistant/aarch64-base-python:3.12-alpine3.20
+          - arch: amd64
+            platform: linux/amd64
+            base: ghcr.io/home-assistant/amd64-base-python:3.12-alpine3.20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/build-push-action@v6
+        with:
+          context: baby_tracker
+          file: baby_tracker/Dockerfile
+          platforms: ${{ matrix.platform }}
+          build-args: BUILD_FROM=${{ matrix.base }}
+          provenance: false
+          push: true
+          tags: |
+            ghcr.io/hms-homelab/${{ matrix.arch }}-baby-tracker:${{ needs.version.outputs.version }}
+            ghcr.io/hms-homelab/${{ matrix.arch }}-baby-tracker:latest
+
+  # Standalone (non-HA) image — single multi-arch manifest, run via docker/compose
+  standalone:
+    needs: version
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Dockerfile.standalone
+          platforms: linux/amd64,linux/arm64
+          provenance: false
+          push: true
+          tags: |
+            ghcr.io/hms-homelab/baby-tracker:${{ needs.version.outputs.version }}
+            ghcr.io/hms-homelab/baby-tracker:latest

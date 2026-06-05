@@ -1,0 +1,34 @@
+# Run Baby Tracker standalone (without Home Assistant).
+#   docker compose up -d   ->   http://localhost:8099
+#
+# Includes a Mosquitto broker so the ESP32 button remote (publishes to
+# baby/remote/event) works out of the box. Point the remote's MQTT at this
+# host:1883. Data persists in ./data (SQLite at ./data/baby.db).
+services:
+  baby-tracker:
+    image: ghcr.io/hms-homelab/baby-tracker:latest
+    container_name: baby-tracker
+    ports:
+      - "8099:8099"
+    environment:
+      TZ: America/New_York
+      PUMP_HOURS: "2"
+      MQTT_HOST: mosquitto
+      MQTT_PORT: "1883"
+      # NOTIFY_TARGETS: ""        # comma-separated; HA notify targets only work as an add-on
+      # DATABASE_URL: ""          # optional external Postgres; blank = built-in SQLite
+    volumes:
+      - ./data:/data
+    depends_on:
+      - mosquitto
+    restart: unless-stopped
+
+  mosquitto:
+    image: eclipse-mosquitto:2
+    container_name: baby-tracker-mqtt
+    ports:
+      - "1883:1883"
+    command: >
+      sh -c "printf 'listener 1883\nallow_anonymous true\n' > /mosquitto/config/mosquitto.conf
+      && exec /usr/sbin/mosquitto -c /mosquitto/config/mosquitto.conf"
+    restart: unless-stopped
