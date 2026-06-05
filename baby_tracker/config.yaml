@@ -3,6 +3,11 @@ version: "2026.1.0"
 slug: baby_tracker
 description: Track feeds, diapers, sleep, pumping and more — with an Ingress web UI, an ESP32 button remote over MQTT, and native Home Assistant entities.
 url: https://github.com/hms-homelab/hms-baby-tracker
+# Pre-built multi-arch images on ghcr (published by .github/workflows/release.yml
+# on each v* tag). Supervisor pulls ghcr.io/hms-homelab/{arch}-baby-tracker:<version>
+# instead of building on-device. Bump `version` only after the matching tag's
+# images exist on ghcr, or installs/updates break.
+image: "ghcr.io/hms-homelab/{arch}-baby-tracker"
 arch:
   - aarch64
   - amd64
