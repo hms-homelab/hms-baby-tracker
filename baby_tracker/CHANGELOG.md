@@ -1,5 +1,15 @@
 # Changelog
 
+## 2026.1.1
+
+- MQTT broker resolution is now **auto-first**: the Supervisor-provided broker
+  (Mosquitto add-on) is used automatically with zero config; the `mqtt_host`
+  option is a **fallback** for an external broker (e.g. EMQX). Previously the
+  explicit option took precedence over auto-discovery.
+- Pre-built ghcr images: installs now **pull** instead of building on-device
+  (add-on multi-arch + a standalone non-HA image), published on `v*` tags.
+- Docs: document the MQTT options and the auto-discover/fallback behavior.
+
 ## 2026.1.0
 
 Initial release.

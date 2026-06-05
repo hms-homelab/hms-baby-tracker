@@ -90,11 +90,17 @@ REST POST /api/event ─┼─▶ Baby Tracker (Docker, /data SQLite)
 
 ## Options
 
+> **MQTT auto-configures** with the Mosquitto add-on; set `mqtt_host` as a **fallback** for an external broker.
+
 | Option | Type | Default | Description |
 |---|---|---|---|
 | `timezone` | string | `America/New_York` | IANA TZ for "today" rollover + log timestamps |
 | `pump_hours` | float | `2` | Hours after a pump event before the reminder fires |
 | `notify_targets` | list | `[]` | HA `notify` service names (without `notify.`) for alerts |
+| `mqtt_host` | string | `""` | **Fallback** broker. Blank = auto-discover the Mosquitto/Supervisor broker; set (e.g. `192.168.1.15`) for an external broker like EMQX |
+| `mqtt_port` | port | `1883` | External broker port (fallback only) |
+| `mqtt_username` | string | `""` | External broker username, if it requires auth |
+| `mqtt_password` | password | `""` | External broker password, if it requires auth |
 | `database_url` | string | `""` | Optional external DB; empty = built-in SQLite |
 
 ## Development

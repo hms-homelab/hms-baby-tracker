@@ -53,10 +53,12 @@ class Config:
             notify_targets=opts.get("notify_targets") or _split(env.get("NOTIFY_TARGETS")),
             data_dir=Path(env.get("DATA_DIR", "/data")),
             database_url=opts.get("database_url") or env.get("DATABASE_URL") or None,
-            mqtt_host=opts.get("mqtt_host") or env.get("MQTT_HOST"),
-            mqtt_port=int(opts.get("mqtt_port", env.get("MQTT_PORT", 1883))),
-            mqtt_username=opts.get("mqtt_username") or env.get("MQTT_USERNAME"),
-            mqtt_password=opts.get("mqtt_password") or env.get("MQTT_PASSWORD"),
+            # Supervisor service (env vars exported by run.sh) is PRIMARY; the
+            # mqtt_host option is the FALLBACK for an external broker (e.g. EMQX).
+            mqtt_host=env.get("MQTT_HOST") or opts.get("mqtt_host") or None,
+            mqtt_port=int(env.get("MQTT_PORT") or opts.get("mqtt_port") or 1883),
+            mqtt_username=env.get("MQTT_USERNAME") or opts.get("mqtt_username"),
+            mqtt_password=env.get("MQTT_PASSWORD") or opts.get("mqtt_password"),
             mqtt_enabled=_as_bool(env.get("MQTT_ENABLED", "1")),
             supervisor_token=env.get("SUPERVISOR_TOKEN"),
         )

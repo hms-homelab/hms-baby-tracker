@@ -39,9 +39,13 @@ automations. Stats are exposed back to Home Assistant as native entities.
 | `mqtt_username`  | string (opt.)   | `""`               | MQTT username (if your broker requires auth). |
 | `mqtt_password`  | password (opt.) | `""`               | MQTT password (if your broker requires auth). |
 
-MQTT host, port, username and password are **not** configured here — they are
-supplied automatically by the Supervisor through the `mqtt` service discovery
-and injected into the add-on environment at start.
+**MQTT precedence (auto-first, fallback to explicit):** the broker is
+**auto-discovered** from the Supervisor `mqtt` service — the Mosquitto add-on, or
+any add-on that provides it — and injected into the add-on at start, so for most
+installs you set **nothing**. The `mqtt_host`/`mqtt_port`/`mqtt_username`/
+`mqtt_password` options above are a **fallback**, used only when the Supervisor
+has no MQTT service to offer (e.g. an external broker like EMQX on another host).
+When both are present, the Supervisor-provided broker wins.
 
 Example configuration:
 
