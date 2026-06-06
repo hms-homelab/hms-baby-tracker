@@ -20,6 +20,11 @@ No n8n, no external database. Pairs with the ESP32 button remote from the
 > **🎛️ Want the physical button remote?** The 3D-printed ESP32 remote that drives
 > this dashboard is built in small batches — **[join the waitlist →](https://www.shmaestro.com/waitlist)**.
 
+<p align="center">
+  <img src="images/baby-remote.png" alt="3D-printed ESP32 baby remote — 15 labeled buttons and a 0.96-inch OLED showing last feed, last pump and the next-pump reminder" width="300">
+</p>
+<p align="center"><em>The companion ESP32 remote: one-tap logging over MQTT, with a 0.96" OLED showing last feed / last pump / next-pump reminder.</em></p>
+
 
 ## Features
 
