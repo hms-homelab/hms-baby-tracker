@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased
+
+- Sleep is now logged as two explicit actions: **Sleep Start** and **Sleep End**
+  (two MQTT buttons + two tiles in the web UI) instead of a single auto-toggling
+  Sleep button. The ESP32 remote maps this onto one physical key: a single tap
+  is sleep start, a double tap (two presses under ~1s apart) is sleep end. The
+  backend still accepts a missing/`toggle` subtype and auto-derives start/end, so
+  un-reflashed remotes keep working.
+
 ## 2026.1.1
 
 - MQTT broker resolution is now **auto-first**: the Supervisor-provided broker

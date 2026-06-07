@@ -37,7 +37,8 @@
       ["Change", "#c8b89a", { event_type: "diaper", event_subtype: "change" }, "🍼"],
     ],
     "grp-other": [
-      ["Sleep", "#b0a0e8", { event_type: "sleep" }, "😴", true],
+      ["Sleep Start", "#b0a0e8", { event_type: "sleep", event_subtype: "start" }, "😴", true],
+      ["Sleep End", "#9a86d4", { event_type: "sleep", event_subtype: "end" }, "⏰", true],
       ["Bath", "#a0d8e8", { event_type: "bath" }, "🛁"],
       ["Medicine", "#e8a0a0", { event_type: "medicine" }, "💊"],
       ["Tummy", "#a0e8c4", { event_type: "tummy_time" }, "🤸"],
