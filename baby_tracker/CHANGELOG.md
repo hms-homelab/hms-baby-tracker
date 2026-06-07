@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 2026.1.2
 
 - Sleep is now logged as two explicit actions: **Sleep Start** and **Sleep End**
   (two MQTT buttons + two tiles in the web UI) instead of a single auto-toggling
