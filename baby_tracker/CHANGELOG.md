@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+- **Feed reminders.** Each breast/bottle feed (re)arms a single timer; when it
+  fires (default `feed_hours: 3`) a "🍼 Feed Reminder" notification goes to your
+  `notify_targets`, mirroring the existing pump reminder. Any newer feed resets
+  the clock. New `feed_hours` option (env `FEED_HOURS` for the standalone image).
+
 ## 2026.1.2
 
 - Sleep is now logged as two explicit actions: **Sleep Start** and **Sleep End**

@@ -36,6 +36,8 @@ No n8n, no external database. Pairs with the ESP32 button remote from the
   `binary_sensor` for "currently sleeping", and a `button.*` per action
 - **Listens to the ESP32 remote** on `baby/remote/event` (and `baby/note`)
 - **Pump reminders** — per-side timer (default 2h) → HA notifications
+- **Feed reminders** — single timer reset by each breast/bottle feed (default
+  3h) → HA notifications
 - **Self-contained** — SQLite under `/data`; survives restarts; optional external
   `database_url`
 - **Silent until configured** — notifications only fire once you set
@@ -70,7 +72,7 @@ docker run -d -p 8099:8099 -v "$PWD/data:/data" \
   ghcr.io/hms-homelab/baby-tracker:latest
 ```
 
-Config is via **env vars** instead of HA options: `TZ`, `PUMP_HOURS`, `MQTT_HOST`,
+Config is via **env vars** instead of HA options: `TZ`, `PUMP_HOURS`, `FEED_HOURS`, `MQTT_HOST`,
 `MQTT_PORT`, `MQTT_USERNAME`, `MQTT_PASSWORD`, `DATABASE_URL`, `DATA_DIR`. Point
 the ESP32 remote's MQTT at the broker and presses log straight in. (HA `notify`
 targets only work when run as the add-on.) Images are multi-arch (amd64 + arm64)
@@ -97,6 +99,7 @@ REST POST /api/event ─┼─▶ Baby Tracker (Docker, /data SQLite)
 |---|---|---|---|
 | `timezone` | string | `America/New_York` | IANA TZ for "today" rollover + log timestamps |
 | `pump_hours` | float | `2` | Hours after a pump event before the reminder fires |
+| `feed_hours` | float | `3` | Hours after the last breast/bottle feed before the feed reminder fires |
 | `notify_targets` | list | `[]` | HA `notify` service names (without `notify.`) for alerts |
 | `mqtt_host` | string | `""` | **Fallback** broker. Blank = auto-discover the Mosquitto/Supervisor broker; set (e.g. `192.168.1.15`) for an external broker like EMQX |
 | `mqtt_port` | port | `1883` | External broker port (fallback only) |

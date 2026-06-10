@@ -1,7 +1,7 @@
 """Baby Tracker — FastAPI app (Ingress UI + REST API + MQTT bridge).
 
 A single funnel, `ingest_and_broadcast`, is shared by the REST API and the MQTT
-subscriber so every event path behaves identically: store -> (arm pump) ->
+subscriber so every event path behaves identically: store -> (arm pump/feed) ->
 publish MQTT state -> notify.
 """
 from __future__ import annotations
@@ -20,7 +20,7 @@ from . import ingest, notify
 from .config import Config
 from .db import Database
 from .mqtt import MqttBridge
-from .scheduler import PumpReminders
+from .scheduler import Reminders
 from .stats import compute
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(levelname)s %(message)s")
@@ -43,13 +43,15 @@ class NoteIn(BaseModel):
 def create_app(cfg: Config | None = None) -> FastAPI:
     cfg = cfg or Config.load()
     db = Database(cfg.db_path, cfg.timezone)
-    pumps = PumpReminders(cfg)
+    reminders = Reminders(cfg)
     mqtt = MqttBridge(cfg)
 
     async def ingest_and_broadcast(event_type, event_subtype=None, note=None, source="api"):
         row = await ingest.create_event(db, cfg, event_type, event_subtype, note)
         if event_type == "pump":
-            pumps.arm(row.get("event_subtype") or "?")
+            reminders.arm_pump(row.get("event_subtype") or "?")
+        elif event_type == "feed":
+            reminders.arm_feed(row.get("event_subtype") or "")
         snapshot = compute(await db.recent(), cfg.timezone)
         await mqtt.publish_state(snapshot["stats"])
         await notify.notify(cfg, row["title"], row["message"])
@@ -61,7 +63,7 @@ def create_app(cfg: Config | None = None) -> FastAPI:
     async def lifespan(app: FastAPI):
         cfg.data_dir.mkdir(parents=True, exist_ok=True)
         await db.init()
-        pumps.start()
+        reminders.start()
         mqtt.on_event = ingest_and_broadcast
         task = asyncio.create_task(mqtt.run())
         with contextlib.suppress(Exception):
@@ -69,7 +71,7 @@ def create_app(cfg: Config | None = None) -> FastAPI:
         try:
             yield
         finally:
-            pumps.shutdown()
+            reminders.shutdown()
             task.cancel()
             with contextlib.suppress(asyncio.CancelledError):
                 await task

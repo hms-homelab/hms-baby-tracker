@@ -26,6 +26,7 @@ def _load_options() -> dict:
 class Config:
     timezone: str = "America/New_York"
     pump_hours: float = 2.0
+    feed_hours: float = 3.0
     notify_targets: list[str] = field(default_factory=list)
     # storage
     data_dir: Path = Path(os.environ.get("DATA_DIR", "/data"))
@@ -50,6 +51,7 @@ class Config:
         return cls(
             timezone=opts.get("timezone") or env.get("TZ", "America/New_York"),
             pump_hours=float(opts.get("pump_hours", env.get("PUMP_HOURS", 2.0))),
+            feed_hours=float(opts.get("feed_hours", env.get("FEED_HOURS", 3.0))),
             notify_targets=opts.get("notify_targets") or _split(env.get("NOTIFY_TARGETS")),
             data_dir=Path(env.get("DATA_DIR", "/data")),
             database_url=opts.get("database_url") or env.get("DATABASE_URL") or None,

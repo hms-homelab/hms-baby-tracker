@@ -25,6 +25,7 @@ map:
 options:
   timezone: America/New_York
   pump_hours: 2
+  feed_hours: 3
   notify_targets: []
   mqtt_host: ""
   mqtt_port: 1883
@@ -34,6 +35,7 @@ options:
 schema:
   timezone: str
   pump_hours: float
+  feed_hours: float
   notify_targets:
     - str
   # MQTT broker — leave blank to auto-discover the Mosquitto add-on; set these
