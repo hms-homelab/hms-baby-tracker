@@ -1,6 +1,6 @@
 # Changelog
 
-## 2026.2.0
+## 2026.1.3
 
 - **Feed reminders.** Each breast/bottle feed (re)arms a single timer; when it
   fires (default `feed_hours: 3`) a "🍼 Feed Reminder" notification goes to your
