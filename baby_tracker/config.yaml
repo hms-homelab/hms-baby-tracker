@@ -1,5 +1,5 @@
 name: Baby Tracker
-version: "2026.1.2"
+version: "2026.2.0"
 slug: baby_tracker
 description: Track feeds, diapers, sleep, pumping and more — with an Ingress web UI, an ESP32 button remote over MQTT, and native Home Assistant entities.
 url: https://github.com/hms-homelab/hms-baby-tracker
