@@ -1,5 +1,31 @@
 # Changelog
 
+## 2026.2.0
+
+- **Contraction AI assessment (opt-in)** — ports the n8n "Contraction AI
+  Assessment" workflow into the add-on. When `ollama_enabled: true`, each logged
+  `contraction` event triggers a local Ollama call (`/api/generate`,
+  `gpt-oss:120b-cloud` by default) over the last 2 hours of contractions and
+  publishes a 2-sentence labor-stage assessment to the new **Contraction
+  Assessment** / **Contraction Assessment Time** sensors (retained
+  `baby/assessment`) plus, best-effort, the legacy `input_text.ai_assessment[_time]`
+  entities. Off by default; new `ollama_*` options. Stat math and prompt are a
+  faithful port of the n8n Code node. This was the last baby workflow on n8n.
+- **Drives the Baby Remote's OLED directly** — replaces the n8n "Baby Remote
+  Display" flow. A 60 s job (and an instant refresh after every feed/pump)
+  publishes the 3 display rows to `baby/remote/display` and the pump-due flag to
+  `baby/remote/alert` (both retained), computed from the latest feed/pump using
+  `pump_hours` as the due threshold. Payloads are byte-compatible with the n8n
+  flow the firmware was built against.
+- **Feed reminders now pop a banner on the device** via `baby/remote/reminder`
+  (`{"l1","l2","secs":4}`) in addition to the phone notification, matching the
+  n8n "Notify Device" node.
+- **Contraction events** now have their own icon (⏱️) instead of falling back to
+  📝, in the UI, MQTT discovery and history replay.
+- With these, the add-on is a full standalone replacement for the n8n baby
+  workflows (event/note logging, display, reminders, stats, history replay) — no
+  n8n dependency.
+
 ## 2026.1.3
 
 - **Feed reminders.** Each breast/bottle feed (re)arms a single timer; when it

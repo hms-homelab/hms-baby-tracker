@@ -1,9 +1,15 @@
-"""Reminders — replaces the n8n "Wait Nh -> notify" flows.
+"""Reminders + device display — replaces the n8n reminder/display flows.
 
 On each pump event we (re)arm a per-side pump timer; on each feed event we
 (re)arm a single feed timer. When a timer fires we send the same reminder text
 the n8n flows used. A newer event of the same kind reschedules (replaces) the
 job, so only the latest pump/feed fires — any feed resets the feed clock.
+
+Additionally, a 60s recurring job refreshes the Baby Remote's OLED rows + the
+pump-due alert flag (the n8n "Baby Remote Display" every-minute flow): it polls
+the DB for the last feed/pump and publishes `baby/remote/display` +
+`baby/remote/alert`. The feed reminder also pops a transient banner on the
+device via `baby/remote/reminder`.
 """
 from __future__ import annotations
 
@@ -13,19 +19,37 @@ from zoneinfo import ZoneInfo
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
-from . import notify
+from . import display, notify
 
 log = logging.getLogger("baby.scheduler")
 
 
 class Reminders:
-    def __init__(self, cfg):
+    def __init__(self, cfg, mqtt=None, db=None):
         self.cfg = cfg
+        self.mqtt = mqtt  # MqttBridge, for device display/reminder/alert
+        self.db = db      # Database, for the periodic display poll
         self.sched = AsyncIOScheduler(timezone="UTC")
 
     def start(self) -> None:
         if not self.sched.running:
             self.sched.start()
+        # Periodic OLED refresh (mirrors n8n's every-minute Display flow).
+        if self.mqtt is not None and self.db is not None:
+            self.sched.add_job(
+                self.refresh_display, "interval", seconds=60,
+                id="display_refresh", replace_existing=True,
+            )
+
+    async def refresh_display(self) -> None:
+        """Recompute + publish the device OLED rows and pump-due alert flag."""
+        if self.mqtt is None or self.db is None:
+            return
+        try:
+            payloads = await display.compute_payloads(self.db, self.cfg)
+            await self.mqtt.publish_display(payloads)
+        except Exception as e:  # never let a poll error kill the scheduler
+            log.warning("display refresh failed: %s", e)
 
     def shutdown(self) -> None:
         if self.sched.running:
@@ -77,3 +101,7 @@ class Reminders:
             f"— {self._hrs(self.cfg.feed_hours)} hours ago."
         )
         await notify.notify(self.cfg, title, message)
+        # Transient OLED banner on the device (n8n "Notify Device" node).
+        if self.mqtt is not None:
+            await self.mqtt.publish_reminder(
+                "Feed reminder", f"last {subtype or 'feed'} {feed_time}", secs=4)

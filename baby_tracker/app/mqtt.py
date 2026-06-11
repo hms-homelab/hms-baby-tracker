@@ -1,17 +1,23 @@
 """MQTT bridge: ingest from the ESP32 remote + expose native HA entities.
 
 Inbound:
-  baby/remote/event  {"event_type","event_subtype"}  (ESP32 buttons + HA buttons)
-  baby/note          {"message"}                       (note logger)
+  baby/remote/event           {"event_type","event_subtype"}  (ESP32 buttons + HA buttons)
+  baby/note                   {"message"}                      (note logger)
+  baby/remote/history/request {"since": <unix_seconds_int>}    (app backfill request)
 
 Outbound:
-  homeassistant/.../config  MQTT discovery for sensors/binary_sensor/buttons
-  baby/state                retained JSON stats (sensors read via value_template)
-  baby/status               availability (online/offline LWT)
+  homeassistant/.../config    MQTT discovery for sensors/binary_sensor/buttons
+  baby/state                  retained JSON stats (sensors read via value_template)
+  baby/status                 availability (online/offline LWT)
+  baby/remote/history/replay  {"events":[...], "done":bool}  chunked history backfill
+  baby/remote/display         retained {"l1","l2","l3"}  3-row OLED text (device)
+  baby/remote/alert           retained "1"/"0"  pump-due flag (device LED + banner)
+  baby/remote/reminder        {"l1","l2","secs"}  transient OLED banner (device)
 """
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import json
 import logging
 
@@ -23,6 +29,13 @@ STATE_TOPIC = "baby/state"
 STATUS_TOPIC = "baby/status"
 EVENT_TOPIC = "baby/remote/event"
 NOTE_TOPIC = "baby/note"
+HISTORY_REQUEST_TOPIC = "baby/remote/history/request"
+HISTORY_REPLAY_TOPIC = "baby/remote/history/replay"
+DISPLAY_TOPIC = "baby/remote/display"
+ALERT_TOPIC = "baby/remote/alert"
+REMINDER_TOPIC = "baby/remote/reminder"
+ASSESSMENT_TOPIC = "baby/assessment"  # retained {"text","time"} contraction AI assessment
+HISTORY_CHUNK = 200  # events per replay message
 DISCOVERY_PREFIX = "homeassistant"
 
 DEVICE = {
@@ -61,10 +74,12 @@ BUTTONS = [
 
 
 class MqttBridge:
-    def __init__(self, cfg):
+    def __init__(self, cfg, db=None):
         self.cfg = cfg
+        self.db = db  # used to serve baby/remote/history/request
         self._client: aiomqtt.Client | None = None
-        self.on_event = None  # async (event_type, subtype, note, source) -> None
+        self.on_event = None    # async (event_type, subtype, note, source) -> None
+        self.on_connect = None  # async () -> None, called once per (re)connect
 
     @property
     def enabled(self) -> bool:
@@ -92,7 +107,11 @@ class MqttBridge:
                     await self._publish_discovery()
                     await client.subscribe(EVENT_TOPIC)
                     await client.subscribe(NOTE_TOPIC)
+                    await client.subscribe(HISTORY_REQUEST_TOPIC)
                     log.info("MQTT connected to %s:%s", self.cfg.mqtt_host, self.cfg.mqtt_port)
+                    if self.on_connect:
+                        with contextlib.suppress(Exception):
+                            await self.on_connect()
                     async for msg in client.messages:
                         await self._handle(str(msg.topic), msg.payload)
             except aiomqtt.MqttError as e:
@@ -105,6 +124,9 @@ class MqttBridge:
             data = json.loads(payload.decode() or "{}")
         except (ValueError, UnicodeDecodeError):
             data = {"message": payload.decode(errors="replace")}
+        if topic == HISTORY_REQUEST_TOPIC:
+            await self.handle_history_request(data)
+            return
         if not self.on_event:
             return
         if topic == NOTE_TOPIC:
@@ -115,6 +137,52 @@ class MqttBridge:
                 await self.on_event(et, data.get("event_subtype") or None,
                                     data.get("note"), "mqtt")
 
+    async def handle_history_request(self, data: dict) -> None:
+        """Reply to a Baby Remote backfill request on baby/remote/history/replay.
+
+        Queries baby_events ASC (optionally filtered by `since` unix seconds),
+        maps each row to {id, ts(epoch s), type, subtype, note}, and publishes in
+        chunks of HISTORY_CHUNK. `done` is true only on the final message; an
+        empty {"events":[],"done":true} terminator is always sent so the app
+        knows the stream finished even when the result set is empty."""
+        if self._client is None or self.db is None:
+            return
+        try:
+            since = int(data.get("since") or 0)
+        except (TypeError, ValueError):
+            since = 0
+        try:
+            events = await self.db.history(since)
+        except Exception as e:  # don't kill the message loop on a bad query
+            log.warning("history request failed: %s", e)
+            return
+
+        payloads = [
+            {
+                "id": e["id"],
+                "ts": e["ts"],
+                "type": e["event_type"],
+                "subtype": e["event_subtype"],
+                "note": e["note"],
+            }
+            for e in events
+        ]
+        n = len(payloads)
+        log.info("history replay: %d events since=%s", n, since)
+        # Chunk; mark done only on the final terminator message.
+        for i in range(0, n, HISTORY_CHUNK):
+            chunk = payloads[i:i + HISTORY_CHUNK]
+            await self._client.publish(
+                HISTORY_REPLAY_TOPIC,
+                json.dumps({"events": chunk, "done": False}),
+                qos=1,
+            )
+        await self._client.publish(
+            HISTORY_REPLAY_TOPIC,
+            json.dumps({"events": [], "done": True}),
+            qos=1,
+        )
+
     async def publish_state(self, stats: dict) -> None:
         if self._client is None:
             return
@@ -122,6 +190,56 @@ class MqttBridge:
             await self._client.publish(STATE_TOPIC, json.dumps(stats), qos=0, retain=True)
         except aiomqtt.MqttError as e:
             log.warning("publish_state failed: %s", e)
+
+    async def publish_display(self, payloads: dict) -> None:
+        """Push the 3-row OLED text + pump-due flag (mirrors the n8n Display flow).
+
+        `payloads` = {"l1","l2","l3","alert"}. Display and alert are RETAINED so
+        the device renders correctly after a reconnect/boot. Matches the
+        firmware's `baby/remote/display` (JSON l1/l2/l3) + `baby/remote/alert`
+        ("1"/"0") subscriptions.
+        """
+        if self._client is None:
+            return
+        display = {"l1": payloads.get("l1", ""),
+                   "l2": payloads.get("l2", ""),
+                   "l3": payloads.get("l3", "")}
+        alert = str(payloads.get("alert", "0"))
+        try:
+            await self._client.publish(DISPLAY_TOPIC, json.dumps(display), qos=0, retain=True)
+            await self._client.publish(ALERT_TOPIC, alert, qos=0, retain=True)
+        except aiomqtt.MqttError as e:
+            log.warning("publish_display failed: %s", e)
+
+    async def publish_assessment(self, text: str, time_str: str) -> None:
+        """Publish the contraction AI assessment (n8n "Update HA Assessment").
+
+        Retained {"text","time"} on `baby/assessment`; the two discovery sensors
+        (sensor.baby_contraction_assessment[_time]) read it via value_template,
+        so an HA dashboard gets the same value the n8n input_text held.
+        """
+        if self._client is None:
+            return
+        payload = {"text": (text or "")[:255], "time": time_str or ""}
+        try:
+            await self._client.publish(ASSESSMENT_TOPIC, json.dumps(payload),
+                                       qos=0, retain=True)
+        except aiomqtt.MqttError as e:
+            log.warning("publish_assessment failed: %s", e)
+
+    async def publish_reminder(self, l1: str, l2: str, secs: int = 4) -> None:
+        """Pop a transient two-line banner on the device OLED.
+
+        Non-retained (shows once) — matches the firmware `baby/remote/reminder`
+        {"l1","l2","secs"} handler used by the n8n feed reminder.
+        """
+        if self._client is None:
+            return
+        payload = {"l1": l1, "l2": l2, "secs": secs}
+        try:
+            await self._client.publish(REMINDER_TOPIC, json.dumps(payload), qos=0, retain=False)
+        except aiomqtt.MqttError as e:
+            log.warning("publish_reminder failed: %s", e)
 
     async def _publish_discovery(self) -> None:
         c = self._client
@@ -151,6 +269,28 @@ class MqttBridge:
                 "device_class": "occupancy",
                 **common,
             }), qos=1, retain=True)
+        # contraction AI assessment text sensors (only when the LLM is enabled)
+        if getattr(self.cfg, "ollama_enabled", False):
+            await c.publish(
+                f"{DISCOVERY_PREFIX}/sensor/baby_tracker/contraction_assessment/config",
+                json.dumps({
+                    "name": "Contraction Assessment",
+                    "unique_id": "baby_contraction_assessment",
+                    "state_topic": ASSESSMENT_TOPIC,
+                    "value_template": "{{ value_json.text }}",
+                    "icon": "mdi:timer-sand",
+                    **common,
+                }), qos=1, retain=True)
+            await c.publish(
+                f"{DISCOVERY_PREFIX}/sensor/baby_tracker/contraction_assessment_time/config",
+                json.dumps({
+                    "name": "Contraction Assessment Time",
+                    "unique_id": "baby_contraction_assessment_time",
+                    "state_topic": ASSESSMENT_TOPIC,
+                    "value_template": "{{ value_json.time }}",
+                    "icon": "mdi:clock-outline",
+                    **common,
+                }), qos=1, retain=True)
         # buttons
         for oid, name, et, st in BUTTONS:
             press = {"event_type": et}

@@ -1,6 +1,7 @@
 fastapi==0.115.6
 uvicorn==0.34.0
 aiosqlite==0.20.0
+asyncpg==0.30.0
 aiomqtt==2.3.0
 APScheduler==3.11.0
 httpx==0.28.1

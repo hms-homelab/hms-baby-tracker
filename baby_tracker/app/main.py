@@ -16,7 +16,7 @@ from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from . import ingest, notify
+from . import assessment, ingest, notify
 from .config import Config
 from .db import Database
 from .mqtt import MqttBridge
@@ -42,9 +42,9 @@ class NoteIn(BaseModel):
 
 def create_app(cfg: Config | None = None) -> FastAPI:
     cfg = cfg or Config.load()
-    db = Database(cfg.db_path, cfg.timezone)
-    reminders = Reminders(cfg)
-    mqtt = MqttBridge(cfg)
+    db = Database(cfg.db_path, cfg.timezone, cfg.database_url)
+    mqtt = MqttBridge(cfg, db)
+    reminders = Reminders(cfg, mqtt=mqtt, db=db)
 
     async def ingest_and_broadcast(event_type, event_subtype=None, note=None, source="api"):
         row = await ingest.create_event(db, cfg, event_type, event_subtype, note)
@@ -54,7 +54,17 @@ def create_app(cfg: Config | None = None) -> FastAPI:
             reminders.arm_feed(row.get("event_subtype") or "")
         snapshot = compute(await db.recent(), cfg.timezone)
         await mqtt.publish_state(snapshot["stats"])
+        # Refresh the device OLED rows + alert flag immediately (don't wait for
+        # the 60s poll) when a feed/pump just changed the "ago" math.
+        if event_type in ("feed", "pump"):
+            await reminders.refresh_display()
         await notify.notify(cfg, row["title"], row["message"])
+        # Contraction AI assessment (n8n "Contraction AI Assessment" webhook).
+        # No-op unless ollama_enabled; runs after the event is stored so the
+        # 2h window includes it. Fire-and-forget so a slow LLM never blocks the
+        # event response.
+        if event_type == "contraction" and cfg.ollama_enabled:
+            asyncio.create_task(assessment.maybe_assess(cfg, db, mqtt))
         log.info("event[%s] %s/%s -> #%s", source, event_type,
                  row.get("event_subtype") or "", row["id"])
         return row
@@ -65,9 +75,18 @@ def create_app(cfg: Config | None = None) -> FastAPI:
         await db.init()
         reminders.start()
         mqtt.on_event = ingest_and_broadcast
+
+        async def on_connect():
+            # Re-publish retained state + device display on every (re)connect so a
+            # broker restart doesn't leave the OLED / HA sensors stale.
+            await mqtt.publish_state(compute(await db.recent(), cfg.timezone)["stats"])
+            await reminders.refresh_display()
+
+        mqtt.on_connect = on_connect
         task = asyncio.create_task(mqtt.run())
         with contextlib.suppress(Exception):
             await mqtt.publish_state(compute(await db.recent(), cfg.timezone)["stats"])
+            await reminders.refresh_display()
         try:
             yield
         finally:

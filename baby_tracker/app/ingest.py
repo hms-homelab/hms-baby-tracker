@@ -19,6 +19,7 @@ ICONS = {
     "weight": "⚖️",
     "pump": "🤱",
     "note": "📝",
+    "contraction": "⏱️",
 }
 
 

@@ -31,13 +31,19 @@ automations. Stats are exposed back to Home Assistant as native entities.
 | Option           | Type            | Default            | Description                                                                                 |
 | ---------------- | --------------- | ------------------ | ------------------------------------------------------------------------------------------- |
 | `timezone`       | string          | `America/New_York` | IANA timezone used for "today" rollover and the formatted timestamps in the log.            |
-| `pump_hours`     | float           | `2`                | Hours after a pump event before a pump reminder is fired.                                   |
+| `pump_hours`     | float           | `2`                | Hours after a pump event before a pump reminder is fired (also the pump-due threshold shown on the remote's OLED). |
+| `feed_hours`     | float           | `3`                | Hours after a feed event before a feed reminder is fired.                                   |
 | `notify_targets` | list of strings | `[]`               | Home Assistant `notify` service names (without the `notify.` prefix) to send alerts to.     |
 | `database_url`   | string (opt.)   | `""`               | Optional external database URL. Leave empty to use the built-in SQLite store under `/data`. |
 | `mqtt_host`      | string (opt.)   | `""`               | MQTT broker host. **Leave blank to auto-discover the Mosquitto add-on**; set it (e.g. `192.168.1.15`) to point at an **external broker** like EMQX on another host. |
 | `mqtt_port`      | port            | `1883`             | MQTT broker port. |
 | `mqtt_username`  | string (opt.)   | `""`               | MQTT username (if your broker requires auth). |
 | `mqtt_password`  | password (opt.) | `""`               | MQTT password (if your broker requires auth). |
+| `ollama_enabled` | bool            | `false`            | Opt-in **Contraction AI assessment**. When on, each logged `contraction` event triggers an LLM labor-stage assessment of the last 2 hours of contractions. Off by default — only enable if you run a local [Ollama](https://ollama.com) server. |
+| `ollama_url`     | string          | `http://192.168.2.5:11434` | Base URL of your Ollama server. |
+| `ollama_model`   | string          | `gpt-oss:120b-cloud` | Ollama model used for the assessment (must be pulled on your server). |
+| `ollama_timeout` | int             | `30`               | Seconds to wait for the Ollama response. |
+| `ollama_prompt`  | string (opt.)   | `""`               | Optional prompt override. Leave blank for the built-in prompt. Supports `{count}`, `{avg_gap}`, `{avg_intensity}`, `{intensity_label}`, `{breakdown}`, `{shortest}`, `{longest}` placeholders. |
 
 **MQTT precedence (auto-first, fallback to explicit):** the broker is
 **auto-discovered** from the Supervisor `mqtt` service — the Mosquitto add-on, or
@@ -72,7 +78,7 @@ the following topics.
 
 `event_type` values and their UI icons:
 `feed` 🍼, `diaper` 🧷, `sleep` 😴, `bath` 🛁, `medicine` 💊,
-`tummy_time` 🤸, `weight` ⚖️, `pump` 🤱, `note` 📝.
+`tummy_time` 🤸, `weight` ⚖️, `pump` 🤱, `note` 📝, `contraction` ⏱️.
 
 Common subtypes: feed → `breast`/`bottle`/`solid`; pump → `left`/`right`;
 diaper → `pee`/`poop`/`both`/`change`.
@@ -86,10 +92,15 @@ mosquitto_pub -t baby/remote/event \
 
 ### Outbound (the add-on publishes)
 
-| Topic          | Retained | Purpose                                                                  |
-| -------------- | -------- | ------------------------------------------------------------------------ |
-| `baby/state`   | yes      | JSON stats snapshot (read by the auto-discovered sensors).               |
-| `baby/status`  | yes      | Availability — `online` / `offline` (Last-Will).                         |
+| Topic                  | Retained | Purpose                                                                  |
+| ---------------------- | -------- | ------------------------------------------------------------------------ |
+| `baby/state`           | yes      | JSON stats snapshot (read by the auto-discovered sensors).               |
+| `baby/status`          | yes      | Availability — `online` / `offline` (Last-Will).                         |
+| `baby/remote/display`  | yes      | `{"l1","l2","l3"}` — the 3 OLED rows for the Baby Remote (last feed/pump ago + pump ETA). Refreshed every 60 s and after each feed/pump. |
+| `baby/remote/alert`    | yes      | `"1"`/`"0"` pump-due flag — the device pulses its LED and pops a banner on the rising edge. |
+| `baby/remote/reminder` | no       | `{"l1","l2","secs"}` transient OLED banner — pushed when a feed reminder fires. |
+| `baby/remote/history/replay` | no | `{"events":[…],"done":bool}` — chunked history backfill (see below).      |
+| `baby/assessment`      | yes      | `{"text","time"}` — the Contraction AI assessment (only when `ollama_enabled`). |
 
 ### Auto-created Home Assistant entities
 
@@ -98,6 +109,8 @@ On connect, the add-on publishes MQTT discovery so these appear under a single
 
 - Sensors: **Last Feed** (min), **Last Diaper** (min), **Feeds Today**,
   **Diapers Today**, **Sleep Today**.
+- Sensors (only when `ollama_enabled`): **Contraction Assessment** and
+  **Contraction Assessment Time**.
 - Binary sensor: **Sleeping** (occupancy).
 - Buttons: Breast, Bottle, Solid, Pump L, Pump R, Pee, Poop, Both, Change,
   Sleep, Bath, Medicine, Tummy — each publishes the matching event to
@@ -124,6 +137,53 @@ login.
 
 ## Data & persistence
 
-Events are stored in SQLite at `/data/baby.db`, which persists across add-on
-restarts and updates. The **Reset** action in the UI (`POST api/reset`) clears
-all logged events — use with care.
+Events are stored in SQLite at `/data/baby.db` by default, which persists across
+add-on restarts and updates. The **Reset** action in the UI (`POST api/reset`)
+clears all logged events — use with care.
+
+### External Postgres (optional, advanced)
+
+Set `database_url` to point the add-on at an existing PostgreSQL database instead
+of the built-in SQLite store — useful if you already keep a `baby_events` archive
+elsewhere. The add-on reads and writes the standard `baby_events` table
+(`id, event_type, event_subtype, note, logged_at`); it creates the table only if
+it is absent and never drops existing data.
+
+## Contraction AI assessment (optional, advanced)
+
+If you run a local [Ollama](https://ollama.com) server, set `ollama_enabled: true`
+to get a short, LLM-generated labor-stage assessment whenever a `contraction`
+event is logged. On each contraction the add-on:
+
+1. gathers all `contraction` events from the **last 2 hours**;
+2. computes the contraction count, average/shortest/longest gap, and (when an
+   intensity is recorded as the subtype or note: `mild`/`moderate`/`strong`/
+   `intense`) the average intensity and breakdown;
+3. asks Ollama (`POST {ollama_url}/api/generate`, `stream=false`) for a 2-sentence
+   assessment naming the likely labor stage plus one practical suggestion;
+4. publishes the result to the **Contraction Assessment** /
+   **Contraction Assessment Time** sensors (via retained `baby/assessment`) and,
+   best-effort, sets the legacy `input_text.ai_assessment` /
+   `input_text.ai_assessment_time` entities so existing dashboards keep working.
+
+With fewer than 2 contractions in the window no LLM call is made and the text is
+set to `Need 2+ contractions in 2h`. The whole feature is gated behind
+`ollama_enabled` and does nothing for installs without an LLM. This replaces the
+former n8n "Contraction AI Assessment" workflow.
+
+```yaml
+database_url: "postgresql://USER:PASSWORD@HOST:5432/DBNAME"
+```
+
+Leave `database_url` empty to use SQLite (the default for most installs).
+
+## Baby Remote history backfill (MQTT)
+
+The Baby Remote app can backfill its local history from the server over MQTT.
+Publish a request and the add-on replies with the full event stream:
+
+- Request: `baby/remote/history/request` — `{"since": <unix_seconds>}` (0 = all).
+- Reply: `baby/remote/history/replay` — `{"events": [{"id","ts","type","subtype","note"}], "done": <bool>}`.
+
+`ts` is unix epoch seconds. Large result sets are split across multiple replay
+messages; `done` is `true` only on the final (terminator) message.

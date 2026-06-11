@@ -39,6 +39,12 @@ class Config:
     mqtt_enabled: bool = True
     # supervisor
     supervisor_token: str | None = None
+    # contraction AI assessment (Ollama) — opt-in; off for parents w/o an LLM.
+    ollama_enabled: bool = False
+    ollama_url: str = "http://192.168.2.5:11434"
+    ollama_model: str = "gpt-oss:120b-cloud"
+    ollama_timeout: float = 30.0
+    ollama_prompt: str | None = None  # optional override (see assessment.build_prompt)
 
     @property
     def db_path(self) -> Path:
@@ -63,6 +69,15 @@ class Config:
             mqtt_password=env.get("MQTT_PASSWORD") or opts.get("mqtt_password"),
             mqtt_enabled=_as_bool(env.get("MQTT_ENABLED", "1")),
             supervisor_token=env.get("SUPERVISOR_TOKEN"),
+            ollama_enabled=_as_bool(env.get("OLLAMA_ENABLED")
+                                    or ("1" if opts.get("ollama_enabled") else "0")),
+            ollama_url=(env.get("OLLAMA_URL") or opts.get("ollama_url")
+                        or "http://192.168.2.5:11434"),
+            ollama_model=(env.get("OLLAMA_MODEL") or opts.get("ollama_model")
+                          or "gpt-oss:120b-cloud"),
+            ollama_timeout=float(env.get("OLLAMA_TIMEOUT")
+                                 or opts.get("ollama_timeout") or 30.0),
+            ollama_prompt=(env.get("OLLAMA_PROMPT") or opts.get("ollama_prompt") or None),
         )
 
 
