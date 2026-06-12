@@ -58,6 +58,10 @@ def create_app(cfg: Config | None = None) -> FastAPI:
         # the 60s poll) when a feed/pump just changed the "ago" math.
         if event_type in ("feed", "pump"):
             await reminders.refresh_display()
+        # Fire the stored event on MQTT (`baby/event`) so HA automations can
+        # trigger on it and notify phones — for every source (web UI, app REST,
+        # or the remote), independent of the add-on's own `notify_targets`.
+        await mqtt.publish_event({**row, "source": source})
         await notify.notify(cfg, row["title"], row["message"])
         # Contraction AI assessment (n8n "Contraction AI Assessment" webhook).
         # No-op unless ollama_enabled; runs after the event is stored so the

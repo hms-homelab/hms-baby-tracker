@@ -1,5 +1,17 @@
 # Changelog
 
+## Unreleased
+
+- **feat: publish every stored event on MQTT (`baby/event`)** — in addition to
+  writing the DB (and the optional `notify_targets` push), each event is now
+  re-fired on `baby/event` (non-retained) for ANY source (web UI, app REST, or
+  the remote). Build your own HA automation with an MQTT trigger on `baby/event`
+  and the notify target picker works normally — fixing the case where selecting
+  targets directly didn't notify. Payload carries `event_type`, `event_subtype`,
+  `note`, `logged_at`, `title`, `message`, `id`, `source`. Kept separate from the
+  inbound `baby/remote/event` topic to avoid a re-ingest loop. See DOCS → "Build
+  your own automation (MQTT)".
+
 ## 2026.2.2
 
 - **fix: restore phone notifications (Supervisor token re-inject)** — the running

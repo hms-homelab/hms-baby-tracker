@@ -127,6 +127,43 @@ These are typically the `mobile_app_*` services created by the Home Assistant
 Companion app on each phone. Save the configuration and restart the add-on for
 changes to take effect.
 
+### Build your own automation (MQTT)
+
+If `notify_targets` doesn't fit your needs — e.g. you want to pick targets
+dynamically, add conditions, or only notify on certain event types — the add-on
+**publishes every stored event on MQTT** so you can trigger any automation:
+
+- **Topic:** `baby/event` (non-retained — fires once per logged event)
+- **Payload (JSON):** `event_type`, `event_subtype`, `note`, `logged_at`,
+  `title`, `message`, `id`, `source` (`api` for the web UI/app REST, or `mqtt`
+  for the remote/HA buttons).
+
+This fires for **every** source and is independent of `notify_targets`. Example
+— notify a phone on every feed:
+
+```yaml
+automation:
+  - alias: Baby feed notification
+    trigger:
+      - platform: mqtt
+        topic: baby/event
+    condition:
+      - "{{ trigger.payload_json.event_type == 'feed' }}"
+    action:
+      - service: notify.mobile_app_pixel_8
+        data:
+          title: "{{ trigger.payload_json.title }}"
+          message: "{{ trigger.payload_json.message }}"
+```
+
+Drop the `condition` to notify on every event, or change it to match
+`diaper`, `pump`, `sleep`, etc. Because this is a normal HA trigger, the
+notify **target picker works** like any other automation.
+
+> Note: `baby/event` is the **outbound** notification topic. The remote and HA
+> buttons still publish presses on `baby/remote/event` (inbound) as before —
+> they're kept separate to avoid a re-ingest loop.
+
 ## Web UI (Ingress)
 
 Click **Open Web UI** on the add-on page (or open the sidebar panel) to use the

@@ -28,6 +28,10 @@ log = logging.getLogger("baby.mqtt")
 STATE_TOPIC = "baby/state"
 STATUS_TOPIC = "baby/status"
 EVENT_TOPIC = "baby/remote/event"
+# Outbound: every stored event is re-fired here so HA automations (MQTT trigger
+# on `baby/event`) can notify phones — for ANY source (web UI, app REST, or the
+# remote). Distinct from the INbound EVENT_TOPIC to avoid a re-ingest loop.
+LOGGED_EVENT_TOPIC = "baby/event"
 NOTE_TOPIC = "baby/note"
 HISTORY_REQUEST_TOPIC = "baby/remote/history/request"
 HISTORY_REPLAY_TOPIC = "baby/remote/history/replay"
@@ -182,6 +186,20 @@ class MqttBridge:
             json.dumps({"events": [], "done": True}),
             qos=1,
         )
+
+    async def publish_event(self, row: dict) -> None:
+        """Fire a stored event on `baby/event` for HA MQTT-trigger automations.
+
+        Non-retained: this is a fire-once signal, not state — retaining it would
+        re-trigger every listening automation on each HA/broker restart. Best
+        effort; no-op until the broker is connected.
+        """
+        if self._client is None:
+            return
+        try:
+            await self._client.publish(LOGGED_EVENT_TOPIC, json.dumps(row), qos=0, retain=False)
+        except aiomqtt.MqttError as e:
+            log.warning("publish_event failed: %s", e)
 
     async def publish_state(self, stats: dict) -> None:
         if self._client is None:
