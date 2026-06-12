@@ -31,5 +31,13 @@ else
     fi
 fi
 
+# Report whether the Supervisor injected our API token (needed for phone
+# notifications via the core notify proxy). Never print the token itself.
+if [ -n "${SUPERVISOR_TOKEN:-}" ]; then
+    echo "[baby-tracker] SUPERVISOR_TOKEN present — HA notify proxy available"
+else
+    echo "[baby-tracker] WARNING: SUPERVISOR_TOKEN missing — notifications disabled. Reinstall/update the add-on so the Supervisor re-injects it."
+fi
+
 cd /app
 exec uvicorn app.main:app --host 0.0.0.0 --port 8099

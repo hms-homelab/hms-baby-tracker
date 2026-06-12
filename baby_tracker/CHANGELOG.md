@@ -1,5 +1,16 @@
 # Changelog
 
+## 2026.2.2
+
+- **fix: restore phone notifications (Supervisor token re-inject)** — the running
+  container had lost its `SUPERVISOR_TOKEN` after manual restarts/rebuilds, so the
+  add-on couldn't reach the core notify proxy (`notify_targets set but no
+  SUPERVISOR_TOKEN; skipping`). The manifest already requests it
+  (`hassio_api`/`homeassistant_api`); a version bump forces the Supervisor to
+  recreate the container under its own management and re-inject the token. Also
+  added a startup log line reporting whether `SUPERVISOR_TOKEN` is present (token
+  value never logged) so this is diagnosable at a glance next time.
+
 ## 2026.2.1
 
 - **fix: alert published on change only** — stops the piezo beeping every 60s on
