@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 2026.2.3
 
 - **feat: publish every stored event on MQTT (`baby/event`)** — in addition to
   writing the DB (and the optional `notify_targets` push), each event is now
