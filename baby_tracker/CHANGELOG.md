@@ -1,5 +1,15 @@
 # Changelog
 
+## 2026.2.1
+
+- **fix: alert published on change only** — stops the piezo beeping every 60s on
+  display refresh. The device firmware chimes on every received
+  `baby/remote/alert` "1" (no rising-edge tracking), so re-emitting the retained
+  "1" on each 60s display refresh beeped the piezo every minute. The add-on now
+  publishes the alert only when it changes, so the chime fires once on the real
+  0→1 transition. The OLED display rows (`baby/remote/display`) still refresh
+  every 60s, silently.
+
 ## 2026.2.0
 
 - **Contraction AI assessment (opt-in)** — ports the n8n "Contraction AI

@@ -207,7 +207,14 @@ class MqttBridge:
         alert = str(payloads.get("alert", "0"))
         try:
             await self._client.publish(DISPLAY_TOPIC, json.dumps(display), qos=0, retain=True)
-            await self._client.publish(ALERT_TOPIC, alert, qos=0, retain=True)
+            # The firmware chimes on EVERY received alert "1" (integrations.c — no
+            # rising-edge tracking), so re-emitting a steady "1" on each 60s display
+            # refresh beeps the piezo every minute. Publish the alert ONLY when it
+            # changes → chime fires once, on the real 0→1 transition. Still retained
+            # so a reconnecting device gets the current pump-due state.
+            if alert != getattr(self, "_last_alert", None):
+                await self._client.publish(ALERT_TOPIC, alert, qos=0, retain=True)
+                self._last_alert = alert
         except aiomqtt.MqttError as e:
             log.warning("publish_display failed: %s", e)
 
