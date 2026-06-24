@@ -1,5 +1,30 @@
 # Changelog
 
+## 2026.3.0 - 2026-06-24
+
+- **feat: "nocturnal nursery" dashboard redesign.** The Ingress web UI now matches
+  the Baby Remote app exactly: a dark, warm theme with a single amber nightlight
+  accent, a per-event colour system, the Bricolage Grotesque / Hanken Grotesk /
+  JetBrains Mono type set, a glowing summary hero, dark "remote key" buttons with
+  colour-coded icons, and a clean mono-timestamped journal. Same logging,
+  backfill and inline-edit behaviour, restyled.
+
+- **feat: edit an event's time, backfill a missed one, or delete it.** Answers
+  [#1](https://github.com/hms-homelab/hms-baby-tracker/issues/1). Miss a feed or
+  log one late and it no longer skews the timeline:
+  - **Add / backfill an event** card in the web UI: pick a type, set a past
+    date/time, optional note, then Add.
+  - **Tap any journal row** to fix its time or delete the event inline.
+  - New REST endpoints: `POST api/event` accepts an optional `logged_at`
+    (ISO8601) for backfill; `PATCH api/event/{id}` edits `logged_at` / `note` /
+    `event_subtype`; `DELETE api/event/{id}` removes an event. All work on both
+    the SQLite and Postgres backends.
+
+  Edits and deletes recompute stats and refresh the device OLED immediately, but
+  do not re-fire `baby/event` or send a push (those stay reserved for new events),
+  and backfilled past events don't arm a feed/pump reminder. See DOCS, "Editing
+  and backfilling events".
+
 ## 2026.2.3
 
 - **feat: publish every stored event on MQTT (`baby/event`)** — in addition to

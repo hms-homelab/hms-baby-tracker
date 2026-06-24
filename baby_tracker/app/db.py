@@ -21,6 +21,9 @@ from zoneinfo import ZoneInfo
 # Matches the Postgres to_char(... 'HH12:MI AM, Mon DD') used by the n8n log API.
 _TIME_FMT = "%I:%M %p, %b %d"
 
+# Sentinel for partial updates: distinguishes "leave unchanged" from "set NULL".
+_UNSET = object()
+
 
 def _fmt_time(iso: str, tz: ZoneInfo) -> str:
     try:
@@ -130,6 +133,48 @@ class SqliteDatabase:
             )
             r = await cur.fetchone()
         return dict(r) if r else None
+
+    async def get_event(self, event_id: int) -> dict | None:
+        import aiosqlite
+
+        async with aiosqlite.connect(self.path) as db:
+            db.row_factory = aiosqlite.Row
+            cur = await db.execute(
+                "SELECT id, event_type, event_subtype, note, logged_at "
+                "FROM baby_events WHERE id = ?",
+                (event_id,),
+            )
+            r = await cur.fetchone()
+        return dict(r) if r else None
+
+    async def update_event(self, event_id: int, logged_at=_UNSET, note=_UNSET,
+                           event_subtype=_UNSET) -> dict | None:
+        """Partial update; fields left as _UNSET are untouched. Returns the row."""
+        import aiosqlite
+
+        sets, vals = [], []
+        if logged_at is not _UNSET:
+            sets.append("logged_at = ?"); vals.append(logged_at)
+        if note is not _UNSET:
+            sets.append("note = ?"); vals.append(note or None)
+        if event_subtype is not _UNSET:
+            sets.append("event_subtype = ?"); vals.append(event_subtype or None)
+        if sets:
+            vals.append(event_id)
+            async with aiosqlite.connect(self.path) as db:
+                await db.execute(
+                    f"UPDATE baby_events SET {', '.join(sets)} WHERE id = ?", vals
+                )
+                await db.commit()
+        return await self.get_event(event_id)
+
+    async def delete_event(self, event_id: int) -> bool:
+        import aiosqlite
+
+        async with aiosqlite.connect(self.path) as db:
+            cur = await db.execute("DELETE FROM baby_events WHERE id = ?", (event_id,))
+            await db.commit()
+            return cur.rowcount > 0
 
     async def history(self, since: int = 0) -> list[dict]:
         """All events ASC for MQTT replay: {id, ts(epoch s), event_type,
@@ -269,6 +314,44 @@ class PostgresDatabase:
                 event_type,
             )
         return self._row_to_dict(r) if r else None
+
+    async def get_event(self, event_id: int) -> dict | None:
+        pool = await self._get_pool()
+        async with pool.acquire() as con:
+            r = await con.fetchrow(
+                "SELECT id, event_type, event_subtype, note, logged_at "
+                "FROM baby_events WHERE id = $1",
+                int(event_id),
+            )
+        return self._row_to_dict(r) if r else None
+
+    async def update_event(self, event_id: int, logged_at=_UNSET, note=_UNSET,
+                           event_subtype=_UNSET) -> dict | None:
+        """Partial update; fields left as _UNSET are untouched. Returns the row."""
+        sets, vals = [], []
+        if logged_at is not _UNSET:
+            vals.append(_parse(logged_at)); sets.append(f"logged_at = ${len(vals)}")
+        if note is not _UNSET:
+            vals.append(note or None); sets.append(f"note = ${len(vals)}")
+        if event_subtype is not _UNSET:
+            vals.append(event_subtype or None); sets.append(f"event_subtype = ${len(vals)}")
+        if sets:
+            vals.append(int(event_id))
+            sql = f"UPDATE baby_events SET {', '.join(sets)} WHERE id = ${len(vals)}"
+            pool = await self._get_pool()
+            async with pool.acquire() as con:
+                await con.execute(sql, *vals)
+        return await self.get_event(event_id)
+
+    async def delete_event(self, event_id: int) -> bool:
+        pool = await self._get_pool()
+        async with pool.acquire() as con:
+            res = await con.execute("DELETE FROM baby_events WHERE id = $1", int(event_id))
+        # asyncpg returns a command tag like "DELETE 1".
+        try:
+            return int(res.split()[-1]) > 0
+        except (ValueError, IndexError):
+            return False
 
     async def history(self, since: int = 0) -> list[dict]:
         """All events ASC for MQTT replay, matching the n8n query plus note.

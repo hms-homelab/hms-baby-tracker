@@ -33,6 +33,15 @@ class EventIn(BaseModel):
     event_type: str
     event_subtype: str | None = None
     note: str | None = None
+    logged_at: str | None = None  # ISO8601; backfill a missed event. Omit for now().
+
+
+class EventPatch(BaseModel):
+    # Only the fields actually sent are applied (see model_fields_set). `logged_at`
+    # is the headline use: fix the time of an event logged late.
+    logged_at: str | None = None
+    note: str | None = None
+    event_subtype: str | None = None
 
 
 class NoteIn(BaseModel):
@@ -46,11 +55,14 @@ def create_app(cfg: Config | None = None) -> FastAPI:
     mqtt = MqttBridge(cfg, db)
     reminders = Reminders(cfg, mqtt=mqtt, db=db)
 
-    async def ingest_and_broadcast(event_type, event_subtype=None, note=None, source="api"):
-        row = await ingest.create_event(db, cfg, event_type, event_subtype, note)
-        if event_type == "pump":
+    async def ingest_and_broadcast(event_type, event_subtype=None, note=None,
+                                   source="api", logged_at=None):
+        row = await ingest.create_event(db, cfg, event_type, event_subtype, note, logged_at)
+        # Reminders are "X minutes from now" — only arm for live events, never for
+        # a backfilled past event (logged_at set).
+        if logged_at is None and event_type == "pump":
             reminders.arm_pump(row.get("event_subtype") or "?")
-        elif event_type == "feed":
+        elif logged_at is None and event_type == "feed":
             reminders.arm_feed(row.get("event_subtype") or "")
         snapshot = compute(await db.recent(), cfg.timezone)
         await mqtt.publish_state(snapshot["stats"])
@@ -72,6 +84,13 @@ def create_app(cfg: Config | None = None) -> FastAPI:
         log.info("event[%s] %s/%s -> #%s", source, event_type,
                  row.get("event_subtype") or "", row["id"])
         return row
+
+    async def rebroadcast():
+        """Recompute + republish state and refresh the device OLED after an edit
+        or delete. No `baby/event` fire / notify — those are for new events only."""
+        snapshot = compute(await db.recent(), cfg.timezone)
+        await mqtt.publish_state(snapshot["stats"])
+        await reminders.refresh_display()
 
     @contextlib.asynccontextmanager
     async def lifespan(app: FastAPI):
@@ -111,8 +130,36 @@ def create_app(cfg: Config | None = None) -> FastAPI:
 
     @app.post("/api/event")
     async def post_event(ev: EventIn):
-        row = await ingest_and_broadcast(ev.event_type, ev.event_subtype, ev.note, "api")
+        row = await ingest_and_broadcast(
+            ev.event_type, ev.event_subtype, ev.note, "api", ev.logged_at
+        )
         return {"ok": True, "event": row}
+
+    @app.patch("/api/event/{event_id}")
+    async def patch_event(event_id: int, ev: EventPatch):
+        if not await db.get_event(event_id):
+            return JSONResponse({"ok": False, "error": "not found"}, status_code=404)
+        fields = ev.model_fields_set
+        kwargs = {}
+        # logged_at is NOT NULL — only apply when a real timestamp is sent.
+        if "logged_at" in fields and ev.logged_at:
+            kwargs["logged_at"] = ev.logged_at
+        if "note" in fields:
+            kwargs["note"] = ev.note
+        if "event_subtype" in fields:
+            kwargs["event_subtype"] = ev.event_subtype
+        row = await db.update_event(event_id, **kwargs)
+        await rebroadcast()
+        log.info("event edited -> #%s %s", event_id, sorted(kwargs))
+        return {"ok": True, "event": row}
+
+    @app.delete("/api/event/{event_id}")
+    async def delete_event(event_id: int):
+        if not await db.delete_event(event_id):
+            return JSONResponse({"ok": False, "error": "not found"}, status_code=404)
+        await rebroadcast()
+        log.info("event deleted -> #%s", event_id)
+        return {"ok": True}
 
     @app.post("/api/note")
     async def post_note(n: NoteIn):

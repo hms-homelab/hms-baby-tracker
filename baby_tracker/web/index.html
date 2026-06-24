@@ -3,8 +3,11 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-  <meta name="theme-color" content="#f7f7fa" />
+  <meta name="theme-color" content="#14131A" />
   <title>Baby Tracker</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700;12..96,800&family=Hanken+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
@@ -49,9 +52,22 @@
       </div>
     </section>
 
+    <!-- Manual entry / backfill -->
+    <section class="card manual">
+      <h2 class="group-title">Add / backfill an event</h2>
+      <div class="manual-row">
+        <select id="manual-type" aria-label="Event type"></select>
+        <input type="datetime-local" id="manual-time" aria-label="When it happened" />
+      </div>
+      <div class="manual-row">
+        <input type="text" id="manual-note" placeholder="Note (optional)" autocomplete="off" />
+        <button class="btn-save" id="manual-add">Add</button>
+      </div>
+    </section>
+
     <!-- Journal -->
     <section class="card journal">
-      <h2 class="group-title">Journal</h2>
+      <h2 class="group-title">Journal <span class="hint">— tap a row to fix its time or delete</span></h2>
       <ul class="journal-list" id="journal"></ul>
     </section>
 

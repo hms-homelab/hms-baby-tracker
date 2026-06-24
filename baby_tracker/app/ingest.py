@@ -50,13 +50,25 @@ async def resolve_sleep_subtype(db, event_subtype: str | None) -> str:
     return "end" if (latest and latest.get("event_subtype") == "start") else "start"
 
 
+def _parse(iso: str) -> dt.datetime:
+    d = dt.datetime.fromisoformat(iso.replace("Z", "+00:00"))
+    if d.tzinfo is None:
+        d = d.replace(tzinfo=dt.timezone.utc)
+    return d
+
+
 async def create_event(db, cfg, event_type: str, event_subtype: str | None = None,
-                        note: str | None = None) -> dict:
-    """Persist an event; return the stored row + formatted title/message."""
+                        note: str | None = None, logged_at: str | None = None) -> dict:
+    """Persist an event; return the stored row + formatted title/message.
+
+    `logged_at` (ISO8601) backfills a missed event at a past time; omit it for
+    `now()`. For a backfilled sleep event pass an explicit start/end subtype —
+    the start<->end auto-toggle only makes sense for live presses.
+    """
     if event_type == "sleep":
         event_subtype = await resolve_sleep_subtype(db, event_subtype)
 
-    when = dt.datetime.now(dt.timezone.utc)
+    when = _parse(logged_at) if logged_at else dt.datetime.now(dt.timezone.utc)
     logged_at = when.isoformat()
     title, message = format_event(event_type, event_subtype, note, when, cfg.timezone)
 

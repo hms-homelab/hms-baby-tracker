@@ -18,13 +18,15 @@ remote from the [baby-tracker-suite](https://github.com/aamat09/baby-tracker-sui
 <p align="center"><em>One-tap Ingress web UI (left), running as a native Home Assistant add-on (right) with Ingress, MQTT discovery, start-on-boot and ~1% RAM.</em></p>
 
 > **Want the physical button remote?** The 3D-printed ESP32 remote that drives this
-> dashboard has build details, photos and a demo on its project page:
-> **[shmaestro.com/projects/baby-tracker](https://shmaestro.com/projects/baby-tracker)**.
+> dashboard has build details, photos and a demo on its
+> **[project page](https://shmaestro.com/projects/baby-tracker)**. Rather not print
+> and solder your own? A pre-built unit is **[available here](https://shop.shmaestro.com)**.
+> Either way the add-on works fully standalone.
 
 <p align="center">
-  <img src="images/baby-remote.png" alt="3D-printed ESP32 baby remote with 15 labeled buttons and a 0.96-inch OLED" width="300">
+  <img src="images/baby-remote.jpg" alt="The 3D-printed ESP32 Baby Remote: a translucent enclosure with 15 labeled buttons and a 0.96-inch OLED" width="320">
 </p>
-<p align="center"><em>The companion ESP32 remote: one-tap logging over MQTT, with a 0.96" OLED showing last feed, last pump and the next-pump reminder.</em></p>
+<p align="center"><em>The companion ESP32 Baby Remote: one-tap logging over MQTT, with a 0.96" OLED showing last feed, last pump and the next-pump reminder. Optional, the add-on works on its own.</em></p>
 
 
 ## Features

@@ -45,8 +45,18 @@
     ],
   };
 
+  // Flattened type list for the manual-entry dropdown (label + payload).
+  var EVENT_OPTIONS = [];
+  Object.keys(GROUPS).forEach(function (gid) {
+    GROUPS[gid].forEach(function (def) {
+      EVENT_OPTIONS.push({ label: def[3] + " " + def[0], payload: def[2] });
+    });
+  });
+  EVENT_OPTIONS.push({ label: "📝 Note", payload: { event_type: "note" } });
+
   var statusEl = document.getElementById("status");
   var pollTimer = null;
+  var editingId = null; // id of the journal row whose inline editor is open
 
   // --- Networking ---------------------------------------------------------
   function setStatus(msg, isErr) {
@@ -61,15 +71,35 @@
     });
   }
 
-  function apiPost(path, body) {
-    return fetch(path, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body || {}),
-    }).then(function (r) {
+  function apiSend(method, path, body) {
+    var opts = { method: method, headers: {} };
+    if (body !== undefined) {
+      opts.headers["Content-Type"] = "application/json";
+      opts.body = JSON.stringify(body);
+    }
+    return fetch(path, opts).then(function (r) {
       if (!r.ok) throw new Error("HTTP " + r.status);
       return r.json();
     });
+  }
+  function apiPost(path, body) { return apiSend("POST", path, body || {}); }
+  function apiPatch(path, body) { return apiSend("PATCH", path, body || {}); }
+  function apiDelete(path) { return apiSend("DELETE", path); }
+
+  // --- Date/time helpers (UTC ISO <-> <input type=datetime-local> local) -----
+  function pad(n) { return (n < 10 ? "0" : "") + n; }
+  function toLocalInput(d) {
+    return d.getFullYear() + "-" + pad(d.getMonth() + 1) + "-" + pad(d.getDate()) +
+      "T" + pad(d.getHours()) + ":" + pad(d.getMinutes());
+  }
+  function nowLocalInput() { return toLocalInput(new Date()); }
+  function isoToLocalInput(iso) {
+    var d = new Date(iso);
+    return isNaN(d.getTime()) ? nowLocalInput() : toLocalInput(d);
+  }
+  function localInputToIso(val) {
+    var d = new Date(val); // "YYYY-MM-DDTHH:MM" is parsed as local time
+    return isNaN(d.getTime()) ? null : d.toISOString();
   }
 
   // --- Rendering ----------------------------------------------------------
@@ -174,8 +204,66 @@
 
       li.appendChild(left);
       li.appendChild(time);
+
+      // Tap a row to edit its time or delete it.
+      if (e.id !== null && e.id !== undefined) {
+        li.classList.add("editable");
+        li.addEventListener("click", function () { openEditor(li, e); });
+      }
       ul.appendChild(li);
     });
+  }
+
+  // Inline editor appended to a journal <li>: fix the time or delete the event.
+  function openEditor(li, entry) {
+    if (li.querySelector(".j-edit")) return; // already open
+    editingId = entry.id;
+    li.classList.add("open");
+
+    var box = document.createElement("div");
+    box.className = "j-edit";
+    box.addEventListener("click", function (ev) { ev.stopPropagation(); });
+
+    var time = document.createElement("input");
+    time.type = "datetime-local";
+    time.value = entry.logged_at ? isoToLocalInput(entry.logged_at) : nowLocalInput();
+
+    var save = document.createElement("button");
+    save.className = "j-save";
+    save.textContent = "Save";
+    save.addEventListener("click", function () {
+      var iso = localInputToIso(time.value);
+      if (!iso) { setStatus("Invalid date/time", true); return; }
+      apiPatch("api/event/" + entry.id, { logged_at: iso })
+        .then(function () { editingId = null; setStatus("Updated ✓"); return refresh(); })
+        .catch(function (err) { setStatus("Failed (" + err.message + ")", true); });
+    });
+
+    var del = document.createElement("button");
+    del.className = "j-del";
+    del.textContent = "Delete";
+    del.addEventListener("click", function () {
+      if (!window.confirm("Delete this event?")) return;
+      apiDelete("api/event/" + entry.id)
+        .then(function () { editingId = null; setStatus("Deleted ✓"); return refresh(); })
+        .catch(function (err) { setStatus("Failed (" + err.message + ")", true); });
+    });
+
+    var cancel = document.createElement("button");
+    cancel.className = "j-cancel";
+    cancel.textContent = "Cancel";
+    cancel.addEventListener("click", function () {
+      editingId = null;
+      li.classList.remove("open");
+      box.remove();
+      refresh();
+    });
+
+    box.appendChild(time);
+    box.appendChild(save);
+    box.appendChild(del);
+    box.appendChild(cancel);
+    li.appendChild(box);
   }
 
   // --- Data refresh -------------------------------------------------------
@@ -183,7 +271,8 @@
     return apiGet("api/log")
       .then(function (data) {
         renderSummary(data.stats || {});
-        renderJournal(data.entries || []);
+        // Don't re-render (and close) the journal while a row editor is open.
+        if (editingId === null) renderJournal(data.entries || []);
         setStatus("");
       })
       .catch(function (err) {
@@ -223,6 +312,30 @@
       });
   }
 
+  function addManual() {
+    var sel = document.getElementById("manual-type");
+    var opt = EVENT_OPTIONS[sel.selectedIndex];
+    if (!opt) return;
+    var timeVal = document.getElementById("manual-time").value;
+    var noteVal = (document.getElementById("manual-note").value || "").trim();
+    var iso = timeVal ? localInputToIso(timeVal) : null;
+    if (timeVal && !iso) { setStatus("Invalid date/time", true); return; }
+
+    var payload = { event_type: opt.payload.event_type };
+    if (opt.payload.event_subtype) payload.event_subtype = opt.payload.event_subtype;
+    if (noteVal) payload.note = noteVal;
+    if (iso) payload.logged_at = iso; // omit => server stamps now()
+
+    apiPost("api/event", payload)
+      .then(function () {
+        document.getElementById("manual-note").value = "";
+        document.getElementById("manual-time").value = nowLocalInput();
+        setStatus("Added ✓");
+        return refresh();
+      })
+      .catch(function (err) { setStatus("Failed to add (" + err.message + ")", true); });
+  }
+
   function resetAll() {
     if (!window.confirm("Reset ALL events? This cannot be undone.")) return;
     apiPost("api/reset", {})
@@ -249,7 +362,9 @@
         var btn = document.createElement("button");
         btn.type = "button";
         btn.className = "tile" + (light ? " light" : "");
-        btn.style.background = color;
+        // Dark "nocturnal nursery" key: the event color drives the icon + accent
+        // (see styles.css var(--accent)), not a full pastel fill.
+        btn.style.setProperty("--accent", color);
 
         var ico = document.createElement("span");
         ico.className = "ico";
@@ -270,8 +385,20 @@
   }
 
   // --- Wire up ------------------------------------------------------------
+  function buildManual() {
+    var sel = document.getElementById("manual-type");
+    EVENT_OPTIONS.forEach(function (o) {
+      var opt = document.createElement("option");
+      opt.textContent = o.label;
+      sel.appendChild(opt);
+    });
+    document.getElementById("manual-time").value = nowLocalInput();
+    document.getElementById("manual-add").addEventListener("click", addManual);
+  }
+
   function init() {
     buildGrids();
+    buildManual();
 
     document.getElementById("note-save").addEventListener("click", function () {
       saveNote(document.getElementById("note-input"), false);

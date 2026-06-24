@@ -172,6 +172,23 @@ front-end calls the API with relative URLs (`api/log`, `api/event`, …) and is
 fully authenticated by Home Assistant — no extra port to expose and no separate
 login.
 
+### Editing and backfilling events
+
+Real life is messy — sometimes you log a feed late, or forget to log one until
+the next change. Two affordances keep the timeline honest:
+
+- **Add / backfill an event** card: pick a type, set a date/time (defaults to
+  now), optionally add a note, and **Add**. Leave the time at "now" for a normal
+  log, or set it in the past to fill in a missed event.
+- **Tap any journal row** to open an inline editor: fix its time with the
+  date/time picker and **Save**, or **Delete** the event entirely.
+
+Under the hood these map to `POST api/event` (with an optional `logged_at`
+ISO8601 timestamp), `PATCH api/event/{id}` (edit `logged_at` / `note` /
+`event_subtype`), and `DELETE api/event/{id}`. Edits and deletes immediately
+recompute the stats and refresh the device OLED, but — unlike a brand-new event
+— they don't re-fire `baby/event` or send a push notification.
+
 ## Data & persistence
 
 Events are stored in SQLite at `/data/baby.db` by default, which persists across
