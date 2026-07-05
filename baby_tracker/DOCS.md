@@ -34,6 +34,9 @@ automations. Stats are exposed back to Home Assistant as native entities.
 | `pump_hours`     | float           | `2`                | Hours after a pump event before a pump reminder is fired (also the pump-due threshold shown on the remote's OLED). |
 | `feed_hours`     | float           | `3`                | Hours after a feed event before a feed reminder is fired.                                   |
 | `notify_targets` | list of strings | `[]`               | Home Assistant `notify` service names (without the `notify.` prefix) to send alerts to.     |
+| `default_tab`    | list            | `baby`             | Which tab the web UI opens on (`get_ready`, `baby`, `contractions`, `health`, `growth`, `supplies`). Lead with `contractions`/`get_ready` pre-birth, then switch to `baby`. |
+| `supply_reminder_hour` | int (0-23) | `9`               | Local hour for the daily supplies sweep that reminds you about low-stock and refill-due items. |
+| `checklist_reset_hour` | int (0-23) | `0`               | Local hour to auto-uncheck the Get Ready checklist each morning. `0` = off (the default, since the seeded items are mostly one-time prep). |
 | `database_url`   | string (opt.)   | `""`               | Optional external database URL. Leave empty to use the built-in SQLite store under `/data`. |
 | `mqtt_host`      | string (opt.)   | `""`               | MQTT broker host. **Leave blank to auto-discover the Mosquitto add-on**; set it (e.g. `192.168.1.15`) to point at an **external broker** like EMQX on another host. |
 | `mqtt_port`      | port            | `1883`             | MQTT broker port. |
@@ -101,6 +104,7 @@ mosquitto_pub -t baby/remote/event \
 | `baby/remote/reminder` | no       | `{"l1","l2","secs"}` transient OLED banner — pushed when a feed reminder fires. |
 | `baby/remote/history/replay` | no | `{"events":[…],"done":bool}` — chunked history backfill (see below).      |
 | `baby/assessment`      | yes      | `{"text","time"}` — the Contraction AI assessment (only when `ollama_enabled`). |
+| `baby/supply/reminder` | no       | `{"title","message","supply"}` — a supply low-stock / refill-due reminder for HA automations. |
 
 ### Auto-created Home Assistant entities
 
@@ -171,6 +175,43 @@ tracker. It runs through Home Assistant Ingress under a path prefix, so the
 front-end calls the API with relative URLs (`api/log`, `api/event`, …) and is
 fully authenticated by Home Assistant — no extra port to expose and no separate
 login.
+
+### Tabs
+
+A pinned **summary** sits on top and a pinned **journal** (logging every tab's
+events) sits at the bottom; between them is a tab bar:
+
+- **Get Ready** — an editable prep checklist for mom, seeded with popular
+  suggestions (crib, diaper bag, newborn clothes, bottles, wipes + cream, car
+  seat). Tap to check off, add your own items, or **Uncheck all**. Optional daily
+  auto-reset via `checklist_reset_hour`.
+- **Baby** — the everyday logging surface (feed / pump / diaper / other, notes,
+  and add/backfill).
+- **Contractions** — three big severity buttons (**Mild** / **Medium** /
+  **Intense**), a note, and a contraction backfill, with a live "how many in the
+  last 2h / last one / average gap" readout. Feeds the optional AI assessment.
+- **Health** / **Growth** — coming in a later release.
+- **Supplies** — see below.
+
+Which tab opens first is the `default_tab` option — set it to `contractions` or
+`get_ready` for the pre-birth phase, then switch to `baby` after the arrival.
+
+### Supplies
+
+Track consumables (formula, diapers, wipes, creams, anything) so you know when to
+restock. Each supply has a quantity + brand + type and two independent nudges:
+
+- **Auto-count-down** — tick "Auto-count-down when I log its event" and pick the
+  event (e.g. a **bottle feed** decrements formula, a **diaper** change decrements
+  wipes). Every matching *live* event subtracts the configured amount; backfilled
+  past events don't.
+- **Refill reminders** — set a **low-stock threshold** (`remind at ≤`) and/or a
+  **refill every N days** cadence. A daily sweep (at `supply_reminder_hour`) sends
+  a notification and fires `baby/supply/reminder` for whichever applies; a low
+  reminder also fires the moment stock crosses the threshold.
+
+Use **−/＋** for quick corrections and **Refill** to restock (which resets the
+cadence and logs a 🧴 refill row in the journal).
 
 ### Editing and backfilling events
 

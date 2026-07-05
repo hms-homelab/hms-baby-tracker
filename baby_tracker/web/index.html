@@ -17,7 +17,7 @@
       <span id="status" class="status" aria-live="polite"></span>
     </header>
 
-    <!-- Summary card -->
+    <!-- Summary card (pinned, always visible) -->
     <section class="card summary" id="summary" aria-label="Today's summary">
       <div class="sum-line" id="sum-feed">🍼 Last feed: —</div>
       <div class="sum-line" id="sum-diaper">🧷 Last diaper: —</div>
@@ -25,47 +25,126 @@
       <div class="sum-line" id="sum-other">🫙 Pumps: 0 | 🛁 Baths: 0 | 💊 Medicine: 0 | 🤸 Tummy time: 0</div>
     </section>
 
-    <!-- Button groups -->
-    <section class="card">
-      <h2 class="group-title">Feed</h2>
-      <div class="grid grid-3" id="grp-feed"></div>
+    <!-- Tab bar (horizontally scrollable) -->
+    <nav class="tabs" id="tabs" role="tablist" aria-label="Sections">
+      <button class="tab" data-tab="get_ready" role="tab">🎒 Get&nbsp;Ready</button>
+      <button class="tab" data-tab="baby" role="tab">👶 Baby</button>
+      <button class="tab" data-tab="contractions" role="tab">⏱️ Contractions</button>
+      <button class="tab" data-tab="health" role="tab" disabled>🌡️ Health<span class="soon">soon</span></button>
+      <button class="tab" data-tab="growth" role="tab" disabled>📈 Growth<span class="soon">soon</span></button>
+      <button class="tab" data-tab="supplies" role="tab">🧴 Supplies</button>
+    </nav>
 
-      <h2 class="group-title">Pump</h2>
-      <div class="grid grid-2" id="grp-pump"></div>
+    <div class="panels">
+      <!-- ============ Get Ready ============ -->
+      <section class="panel" data-panel="get_ready" hidden>
+        <div class="card">
+          <h2 class="group-title">Get Ready <span class="hint" id="checklist-progress"></span></h2>
+          <ul class="checklist" id="checklist"></ul>
+          <div class="note-row">
+            <input type="text" id="checklist-input" placeholder="Add an item" autocomplete="off" />
+            <button class="btn-save" id="checklist-add">Add</button>
+          </div>
+          <div class="foot"><button class="btn-reset" id="checklist-reset">Uncheck all</button></div>
+        </div>
+      </section>
 
-      <h2 class="group-title">Diaper</h2>
-      <div class="grid grid-4" id="grp-diaper"></div>
+      <!-- ============ Baby ============ -->
+      <section class="panel" data-panel="baby" hidden>
+        <section class="card">
+          <h2 class="group-title">Feed</h2>
+          <div class="grid grid-3" id="grp-feed"></div>
+          <h2 class="group-title">Pump</h2>
+          <div class="grid grid-2" id="grp-pump"></div>
+          <h2 class="group-title">Diaper</h2>
+          <div class="grid grid-4" id="grp-diaper"></div>
+          <h2 class="group-title">Other</h2>
+          <div class="grid grid-4" id="grp-other"></div>
+        </section>
 
-      <h2 class="group-title">Other</h2>
-      <div class="grid grid-4" id="grp-other"></div>
-    </section>
+        <section class="card notes">
+          <div class="note-row">
+            <input type="text" id="note-input" placeholder="Add a Note" autocomplete="off" />
+            <button class="btn-save" id="note-save">Save</button>
+          </div>
+          <div class="note-row">
+            <input type="text" id="special-input" placeholder="Special Note ⭐" autocomplete="off" />
+            <button class="btn-save btn-special" id="special-save">Save</button>
+          </div>
+        </section>
 
-    <!-- Notes -->
-    <section class="card notes">
-      <div class="note-row">
-        <input type="text" id="note-input" placeholder="Add a Note" autocomplete="off" />
-        <button class="btn-save" id="note-save">Save</button>
-      </div>
-      <div class="note-row">
-        <input type="text" id="special-input" placeholder="Special Note ⭐" autocomplete="off" />
-        <button class="btn-save btn-special" id="special-save">Save</button>
-      </div>
-    </section>
+        <section class="card manual">
+          <h2 class="group-title">Add / backfill an event</h2>
+          <div class="manual-row">
+            <select id="manual-type" aria-label="Event type"></select>
+            <input type="datetime-local" id="manual-time" aria-label="When it happened" />
+          </div>
+          <div class="manual-row">
+            <input type="text" id="manual-note" placeholder="Note (optional)" autocomplete="off" />
+            <button class="btn-save" id="manual-add">Add</button>
+          </div>
+        </section>
+      </section>
 
-    <!-- Manual entry / backfill -->
-    <section class="card manual">
-      <h2 class="group-title">Add / backfill an event</h2>
-      <div class="manual-row">
-        <select id="manual-type" aria-label="Event type"></select>
-        <input type="datetime-local" id="manual-time" aria-label="When it happened" />
-      </div>
-      <div class="manual-row">
-        <input type="text" id="manual-note" placeholder="Note (optional)" autocomplete="off" />
-        <button class="btn-save" id="manual-add">Add</button>
-      </div>
-    </section>
+      <!-- ============ Contractions ============ -->
+      <section class="panel" data-panel="contractions" hidden>
+        <section class="card">
+          <div class="ctx-readout" id="ctx-readout">No contractions yet.</div>
+          <div class="grid ctx-grid" id="grp-contraction"></div>
+          <div class="note-row">
+            <input type="text" id="ctx-note" placeholder="Note (optional)" autocomplete="off" />
+            <button class="btn-save" id="ctx-note-save">Log note</button>
+          </div>
+          <h2 class="group-title">Backfill a contraction</h2>
+          <div class="manual-row">
+            <select id="ctx-backfill-intensity" aria-label="Intensity"></select>
+            <input type="datetime-local" id="ctx-backfill-time" aria-label="When it happened" />
+          </div>
+          <div class="manual-row">
+            <button class="btn-save" id="ctx-backfill-add">Add past contraction</button>
+          </div>
+        </section>
+      </section>
 
-    <!-- Journal -->
+      <!-- ============ Supplies ============ -->
+      <section class="panel" data-panel="supplies" hidden>
+        <section class="card">
+          <h2 class="group-title">Supplies <span class="hint">— auto-count down as you log, refill reminders</span></h2>
+          <ul class="supply-list" id="supply-list"></ul>
+        </section>
+        <section class="card">
+          <h2 class="group-title">Add a supply</h2>
+          <div class="manual-row">
+            <select id="sup-category" aria-label="Category"></select>
+            <input type="text" id="sup-name" placeholder="Name (e.g. Kirkland Formula)" autocomplete="off" />
+          </div>
+          <div class="manual-row">
+            <input type="text" id="sup-brand" placeholder="Brand (optional)" autocomplete="off" />
+            <input type="text" id="sup-type" placeholder="Type (optional)" autocomplete="off" />
+          </div>
+          <div class="manual-row">
+            <input type="number" id="sup-qty" placeholder="Qty" min="0" step="any" />
+            <input type="text" id="sup-unit" placeholder="Unit (cans…)" autocomplete="off" />
+          </div>
+          <div class="manual-row">
+            <input type="number" id="sup-low" placeholder="Remind at ≤" min="0" step="any" />
+            <input type="number" id="sup-days" placeholder="Refill every N days" min="0" step="1" />
+          </div>
+          <div class="manual-row">
+            <label class="cb"><input type="checkbox" id="sup-autodec" /> Auto-count-down when I log its event</label>
+          </div>
+          <div class="manual-row consume-row" id="sup-consume-row" hidden>
+            <select id="sup-consume-type" aria-label="Consume on event"></select>
+            <input type="number" id="sup-consume-amt" placeholder="Amount / event" min="0" step="any" value="1" />
+          </div>
+          <div class="manual-row">
+            <button class="btn-save" id="sup-add">Add supply</button>
+          </div>
+        </section>
+      </section>
+    </div>
+
+    <!-- Journal (pinned below tabs — logs ALL event types) -->
     <section class="card journal">
       <h2 class="group-title">Journal <span class="hint">— tap a row to fix its time or delete</span></h2>
       <ul class="journal-list" id="journal"></ul>

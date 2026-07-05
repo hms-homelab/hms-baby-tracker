@@ -42,7 +42,9 @@ SUPERVISOR_CORE = "http://supervisor/core/api"
 HA_TEXT_ENTITY = "input_text.ai_assessment"
 HA_TIME_ENTITY = "input_text.ai_assessment_time"
 
-_INTENSITY_MAP = {"mild": 1, "moderate": 2, "strong": 3, "intense": 4}
+# "medium" is the Contractions-tab button label; it's an alias for "moderate"
+# (both weight 2) so a tab-logged contraction still resolves an intensity.
+_INTENSITY_MAP = {"mild": 1, "moderate": 2, "medium": 2, "strong": 3, "intense": 4}
 _INTENSITY_LABELS = ["mild", "moderate", "strong", "intense"]
 
 NO_DATA_MSG = "Need 2+ contractions in 2h"

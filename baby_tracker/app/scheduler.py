@@ -13,13 +13,14 @@ device via `baby/remote/reminder`.
 """
 from __future__ import annotations
 
+import contextlib
 import datetime as dt
 import logging
 from zoneinfo import ZoneInfo
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
-from . import display, notify
+from . import display, notify, supplies
 
 log = logging.getLogger("baby.scheduler")
 
@@ -40,6 +41,22 @@ class Reminders:
                 self.refresh_display, "interval", seconds=60,
                 id="display_refresh", replace_existing=True,
             )
+        if self.db is not None:
+            # Daily supplies sweep: low-stock + refill-due reminders (SDD-002).
+            self.sched.add_job(
+                self.sweep_supplies, "cron",
+                hour=int(self.cfg.supply_reminder_hour), minute=0,
+                timezone=self.cfg.timezone,
+                id="supply_sweep", replace_existing=True,
+            )
+            # Optional daily Get Ready checklist reset (0 = off).
+            if int(self.cfg.checklist_reset_hour) > 0:
+                self.sched.add_job(
+                    self.reset_checklist, "cron",
+                    hour=int(self.cfg.checklist_reset_hour), minute=0,
+                    timezone=self.cfg.timezone,
+                    id="checklist_reset", replace_existing=True,
+                )
 
     async def refresh_display(self) -> None:
         """Recompute + publish the device OLED rows and pump-due alert flag."""
@@ -50,6 +67,35 @@ class Reminders:
             await self.mqtt.publish_display(payloads)
         except Exception as e:  # never let a poll error kill the scheduler
             log.warning("display refresh failed: %s", e)
+
+    async def sweep_supplies(self) -> None:
+        """Daily low-stock / refill-due reminder pass."""
+        if self.db is None:
+            return
+        try:
+            due = await supplies.sweep_reminders(self.db)
+        except Exception as e:
+            log.warning("supply sweep failed: %s", e)
+            return
+        for s in due:
+            await self.fire_supply_reminder(s, s.get("reasons", []))
+
+    async def fire_supply_reminder(self, supply: dict, reasons: list) -> None:
+        """Deliver one supply reminder over notify + MQTT (shared by the sweep and
+        the immediate threshold-cross path in the ingest funnel)."""
+        title, message = supplies.reminder_text(supply, reasons)
+        with contextlib.suppress(Exception):
+            await notify.notify(self.cfg, title, message)
+        if self.mqtt is not None:
+            with contextlib.suppress(Exception):
+                await self.mqtt.publish_supply_reminder(title, message, supply)
+
+    async def reset_checklist(self) -> None:
+        if self.db is None:
+            return
+        with contextlib.suppress(Exception):
+            await self.db.reset_checklist()
+            log.info("Get Ready checklist auto-reset")
 
     def shutdown(self) -> None:
         if self.sched.running:

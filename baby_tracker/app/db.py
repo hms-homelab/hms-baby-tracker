@@ -24,6 +24,28 @@ _TIME_FMT = "%I:%M %p, %b %d"
 # Sentinel for partial updates: distinguishes "leave unchanged" from "set NULL".
 _UNSET = object()
 
+# Get Ready tab: popular prep suggestions seeded on first run (all editable).
+DEFAULT_CHECKLIST = [
+    "Crib",
+    "Diaper bag",
+    "Newborn clothes",
+    "Bottles",
+    "Wipes + cream",
+    "Car seat installed",
+]
+
+# Editable columns of baby_supplies (order used by insert/row mapping).
+SUPPLY_FIELDS = (
+    "category", "name", "brand", "type", "quantity", "unit",
+    "low_threshold", "refill_days", "last_refill_at",
+    "consume_event_type", "consume_event_subtype", "consume_amount",
+    "low_notified", "created_at", "updated_at",
+)
+
+
+def _now_iso() -> str:
+    return dt.datetime.now(dt.timezone.utc).isoformat()
+
 
 def _fmt_time(iso: str, tz: ZoneInfo) -> str:
     try:
@@ -68,6 +90,34 @@ CREATE TABLE IF NOT EXISTS baby_events (
 );
 CREATE INDEX IF NOT EXISTS idx_baby_events_logged_at ON baby_events (logged_at DESC);
 CREATE INDEX IF NOT EXISTS idx_baby_events_type ON baby_events (event_type);
+
+CREATE TABLE IF NOT EXISTS baby_supplies (
+    id                    INTEGER PRIMARY KEY AUTOINCREMENT,
+    category              TEXT NOT NULL,
+    name                  TEXT NOT NULL,
+    brand                 TEXT,
+    type                  TEXT,
+    quantity              REAL NOT NULL DEFAULT 0,
+    unit                  TEXT,
+    low_threshold         REAL,
+    refill_days           INTEGER,
+    last_refill_at        TEXT,
+    consume_event_type    TEXT,
+    consume_event_subtype TEXT,
+    consume_amount        REAL NOT NULL DEFAULT 1,
+    low_notified          INTEGER NOT NULL DEFAULT 0,
+    created_at            TEXT NOT NULL,
+    updated_at            TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS baby_checklist (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    label      TEXT NOT NULL,
+    position   INTEGER NOT NULL DEFAULT 0,
+    done       INTEGER NOT NULL DEFAULT 0,
+    done_at    TEXT,
+    updated_at TEXT NOT NULL
+);
 """
 
 
@@ -81,6 +131,16 @@ class SqliteDatabase:
 
         async with aiosqlite.connect(self.path) as db:
             await db.executescript(SQLITE_SCHEMA)
+            # Seed the Get Ready checklist on a fresh install (only when empty).
+            cur = await db.execute("SELECT COUNT(*) FROM baby_checklist")
+            (count,) = await cur.fetchone()
+            if not count:
+                now = _now_iso()
+                await db.executemany(
+                    "INSERT INTO baby_checklist (label, position, updated_at) "
+                    "VALUES (?, ?, ?)",
+                    [(label, i, now) for i, label in enumerate(DEFAULT_CHECKLIST)],
+                )
             await db.commit()
 
     async def insert_event(
@@ -212,6 +272,171 @@ class SqliteDatabase:
             await db.execute("DELETE FROM sqlite_sequence WHERE name='baby_events'")
             await db.commit()
 
+    # --- supplies ----------------------------------------------------------
+    async def list_supplies(self) -> list[dict]:
+        import aiosqlite
+
+        async with aiosqlite.connect(self.path) as db:
+            db.row_factory = aiosqlite.Row
+            cur = await db.execute(
+                "SELECT * FROM baby_supplies ORDER BY category, name"
+            )
+            rows = await cur.fetchall()
+        return [dict(r) for r in rows]
+
+    async def get_supply(self, sid: int) -> dict | None:
+        import aiosqlite
+
+        async with aiosqlite.connect(self.path) as db:
+            db.row_factory = aiosqlite.Row
+            cur = await db.execute("SELECT * FROM baby_supplies WHERE id = ?", (sid,))
+            r = await cur.fetchone()
+        return dict(r) if r else None
+
+    async def insert_supply(self, data: dict) -> dict:
+        import aiosqlite
+
+        now = _now_iso()
+        vals = {
+            "category": data.get("category") or "other",
+            "name": data.get("name") or "Supply",
+            "brand": data.get("brand") or None,
+            "type": data.get("type") or None,
+            "quantity": float(data.get("quantity") or 0),
+            "unit": data.get("unit") or None,
+            "low_threshold": _num_or_none(data.get("low_threshold")),
+            "refill_days": _int_or_none(data.get("refill_days")),
+            "last_refill_at": data.get("last_refill_at") or now,
+            "consume_event_type": data.get("consume_event_type") or None,
+            "consume_event_subtype": data.get("consume_event_subtype") or None,
+            "consume_amount": float(data.get("consume_amount") or 1),
+            "low_notified": 0,
+            "created_at": now,
+            "updated_at": now,
+        }
+        cols = ", ".join(vals.keys())
+        ph = ", ".join("?" for _ in vals)
+        async with aiosqlite.connect(self.path) as db:
+            cur = await db.execute(
+                f"INSERT INTO baby_supplies ({cols}) VALUES ({ph})", tuple(vals.values())
+            )
+            await db.commit()
+            sid = cur.lastrowid
+        return await self.get_supply(sid)
+
+    async def update_supply(self, sid: int, **fields) -> dict | None:
+        import aiosqlite
+
+        allowed = {k: v for k, v in fields.items() if k in SUPPLY_FIELDS}
+        if not allowed:
+            return await self.get_supply(sid)
+        allowed["updated_at"] = _now_iso()
+        sets = ", ".join(f"{k} = ?" for k in allowed)
+        vals = list(allowed.values()) + [sid]
+        async with aiosqlite.connect(self.path) as db:
+            await db.execute(f"UPDATE baby_supplies SET {sets} WHERE id = ?", vals)
+            await db.commit()
+        return await self.get_supply(sid)
+
+    async def delete_supply(self, sid: int) -> bool:
+        import aiosqlite
+
+        async with aiosqlite.connect(self.path) as db:
+            cur = await db.execute("DELETE FROM baby_supplies WHERE id = ?", (sid,))
+            await db.commit()
+            return cur.rowcount > 0
+
+    # --- checklist ---------------------------------------------------------
+    async def list_checklist(self) -> list[dict]:
+        import aiosqlite
+
+        async with aiosqlite.connect(self.path) as db:
+            db.row_factory = aiosqlite.Row
+            cur = await db.execute(
+                "SELECT * FROM baby_checklist ORDER BY position, id"
+            )
+            rows = await cur.fetchall()
+        return [dict(r) for r in rows]
+
+    async def get_checklist_item(self, cid: int) -> dict | None:
+        import aiosqlite
+
+        async with aiosqlite.connect(self.path) as db:
+            db.row_factory = aiosqlite.Row
+            cur = await db.execute("SELECT * FROM baby_checklist WHERE id = ?", (cid,))
+            r = await cur.fetchone()
+        return dict(r) if r else None
+
+    async def insert_checklist(self, label: str, position: int | None = None) -> dict:
+        import aiosqlite
+
+        now = _now_iso()
+        async with aiosqlite.connect(self.path) as db:
+            if position is None:
+                cur = await db.execute("SELECT COALESCE(MAX(position), -1) + 1 FROM baby_checklist")
+                (position,) = await cur.fetchone()
+            cur = await db.execute(
+                "INSERT INTO baby_checklist (label, position, updated_at) VALUES (?, ?, ?)",
+                (label, position, now),
+            )
+            await db.commit()
+            cid = cur.lastrowid
+        return await self.get_checklist_item(cid)
+
+    async def update_checklist(self, cid: int, label=_UNSET, done=_UNSET,
+                               position=_UNSET) -> dict | None:
+        import aiosqlite
+
+        sets, vals = ["updated_at = ?"], [_now_iso()]
+        if label is not _UNSET:
+            sets.append("label = ?"); vals.append(label)
+        if done is not _UNSET:
+            sets.append("done = ?"); vals.append(1 if done else 0)
+            sets.append("done_at = ?"); vals.append(_now_iso() if done else None)
+        if position is not _UNSET:
+            sets.append("position = ?"); vals.append(int(position))
+        vals.append(cid)
+        async with aiosqlite.connect(self.path) as db:
+            await db.execute(f"UPDATE baby_checklist SET {', '.join(sets)} WHERE id = ?", vals)
+            await db.commit()
+        return await self.get_checklist_item(cid)
+
+    async def delete_checklist(self, cid: int) -> bool:
+        import aiosqlite
+
+        async with aiosqlite.connect(self.path) as db:
+            cur = await db.execute("DELETE FROM baby_checklist WHERE id = ?", (cid,))
+            await db.commit()
+            return cur.rowcount > 0
+
+    async def reset_checklist(self) -> None:
+        import aiosqlite
+
+        async with aiosqlite.connect(self.path) as db:
+            await db.execute(
+                "UPDATE baby_checklist SET done = 0, done_at = NULL, updated_at = ?",
+                (_now_iso(),),
+            )
+            await db.commit()
+
+
+def _num_or_none(v):
+    if v is None or v == "":
+        return None
+    try:
+        return float(v)
+    except (TypeError, ValueError):
+        return None
+
+
+def _int_or_none(v):
+    if v is None or v == "":
+        return None
+    try:
+        return int(v)
+    except (TypeError, ValueError):
+        return None
+
 
 # ---------------------------------------------------------------------------
 # Postgres backend (asyncpg)
@@ -229,6 +454,34 @@ CREATE TABLE IF NOT EXISTS baby_events (
 );
 CREATE INDEX IF NOT EXISTS idx_baby_events_logged_at ON baby_events (logged_at DESC);
 CREATE INDEX IF NOT EXISTS idx_baby_events_type ON baby_events (event_type);
+
+CREATE TABLE IF NOT EXISTS baby_supplies (
+    id                    bigserial PRIMARY KEY,
+    category              text NOT NULL,
+    name                  text NOT NULL,
+    brand                 text,
+    type                  text,
+    quantity              real NOT NULL DEFAULT 0,
+    unit                  text,
+    low_threshold         real,
+    refill_days           integer,
+    last_refill_at        text,
+    consume_event_type    text,
+    consume_event_subtype text,
+    consume_amount        real NOT NULL DEFAULT 1,
+    low_notified          integer NOT NULL DEFAULT 0,
+    created_at            text NOT NULL,
+    updated_at            text NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS baby_checklist (
+    id         bigserial PRIMARY KEY,
+    label      text NOT NULL,
+    position   integer NOT NULL DEFAULT 0,
+    done       integer NOT NULL DEFAULT 0,
+    done_at    text,
+    updated_at text NOT NULL
+);
 """
 
 
@@ -262,6 +515,14 @@ class PostgresDatabase:
         pool = await self._get_pool()
         async with pool.acquire() as con:
             await con.execute(PG_SCHEMA)
+            count = await con.fetchval("SELECT COUNT(*) FROM baby_checklist")
+            if not count:
+                now = _now_iso()
+                await con.executemany(
+                    "INSERT INTO baby_checklist (label, position, updated_at) "
+                    "VALUES ($1, $2, $3)",
+                    [(label, i, now) for i, label in enumerate(DEFAULT_CHECKLIST)],
+                )
 
     async def insert_event(
         self,
@@ -379,6 +640,136 @@ class PostgresDatabase:
             }
             for r in rows
         ]
+
+    # --- supplies ----------------------------------------------------------
+    async def list_supplies(self) -> list[dict]:
+        pool = await self._get_pool()
+        async with pool.acquire() as con:
+            rows = await con.fetch("SELECT * FROM baby_supplies ORDER BY category, name")
+        return [dict(r) for r in rows]
+
+    async def get_supply(self, sid: int) -> dict | None:
+        pool = await self._get_pool()
+        async with pool.acquire() as con:
+            r = await con.fetchrow("SELECT * FROM baby_supplies WHERE id = $1", int(sid))
+        return dict(r) if r else None
+
+    async def insert_supply(self, data: dict) -> dict:
+        now = _now_iso()
+        vals = {
+            "category": data.get("category") or "other",
+            "name": data.get("name") or "Supply",
+            "brand": data.get("brand") or None,
+            "type": data.get("type") or None,
+            "quantity": float(data.get("quantity") or 0),
+            "unit": data.get("unit") or None,
+            "low_threshold": _num_or_none(data.get("low_threshold")),
+            "refill_days": _int_or_none(data.get("refill_days")),
+            "last_refill_at": data.get("last_refill_at") or now,
+            "consume_event_type": data.get("consume_event_type") or None,
+            "consume_event_subtype": data.get("consume_event_subtype") or None,
+            "consume_amount": float(data.get("consume_amount") or 1),
+            "low_notified": 0,
+            "created_at": now,
+            "updated_at": now,
+        }
+        cols = ", ".join(vals.keys())
+        ph = ", ".join(f"${i}" for i in range(1, len(vals) + 1))
+        pool = await self._get_pool()
+        async with pool.acquire() as con:
+            row = await con.fetchrow(
+                f"INSERT INTO baby_supplies ({cols}) VALUES ({ph}) RETURNING *",
+                *vals.values(),
+            )
+        return dict(row)
+
+    async def update_supply(self, sid: int, **fields) -> dict | None:
+        allowed = {k: v for k, v in fields.items() if k in SUPPLY_FIELDS}
+        if not allowed:
+            return await self.get_supply(sid)
+        allowed["updated_at"] = _now_iso()
+        keys = list(allowed.keys())
+        sets = ", ".join(f"{k} = ${i}" for i, k in enumerate(keys, start=1))
+        vals = list(allowed.values()) + [int(sid)]
+        pool = await self._get_pool()
+        async with pool.acquire() as con:
+            row = await con.fetchrow(
+                f"UPDATE baby_supplies SET {sets} WHERE id = ${len(vals)} RETURNING *", *vals
+            )
+        return dict(row) if row else None
+
+    async def delete_supply(self, sid: int) -> bool:
+        pool = await self._get_pool()
+        async with pool.acquire() as con:
+            res = await con.execute("DELETE FROM baby_supplies WHERE id = $1", int(sid))
+        try:
+            return int(res.split()[-1]) > 0
+        except (ValueError, IndexError):
+            return False
+
+    # --- checklist ---------------------------------------------------------
+    async def list_checklist(self) -> list[dict]:
+        pool = await self._get_pool()
+        async with pool.acquire() as con:
+            rows = await con.fetch("SELECT * FROM baby_checklist ORDER BY position, id")
+        return [dict(r) for r in rows]
+
+    async def get_checklist_item(self, cid: int) -> dict | None:
+        pool = await self._get_pool()
+        async with pool.acquire() as con:
+            r = await con.fetchrow("SELECT * FROM baby_checklist WHERE id = $1", int(cid))
+        return dict(r) if r else None
+
+    async def insert_checklist(self, label: str, position: int | None = None) -> dict:
+        now = _now_iso()
+        pool = await self._get_pool()
+        async with pool.acquire() as con:
+            if position is None:
+                position = await con.fetchval(
+                    "SELECT COALESCE(MAX(position), -1) + 1 FROM baby_checklist"
+                )
+            row = await con.fetchrow(
+                "INSERT INTO baby_checklist (label, position, updated_at) "
+                "VALUES ($1, $2, $3) RETURNING *",
+                label, int(position), now,
+            )
+        return dict(row)
+
+    async def update_checklist(self, cid: int, label=_UNSET, done=_UNSET,
+                               position=_UNSET) -> dict | None:
+        sets, vals = ["updated_at"], [_now_iso()]
+        if label is not _UNSET:
+            sets.append("label"); vals.append(label)
+        if done is not _UNSET:
+            sets.append("done"); vals.append(1 if done else 0)
+            sets.append("done_at"); vals.append(_now_iso() if done else None)
+        if position is not _UNSET:
+            sets.append("position"); vals.append(int(position))
+        assign = ", ".join(f"{k} = ${i}" for i, k in enumerate(sets, start=1))
+        vals.append(int(cid))
+        pool = await self._get_pool()
+        async with pool.acquire() as con:
+            row = await con.fetchrow(
+                f"UPDATE baby_checklist SET {assign} WHERE id = ${len(vals)} RETURNING *", *vals
+            )
+        return dict(row) if row else None
+
+    async def delete_checklist(self, cid: int) -> bool:
+        pool = await self._get_pool()
+        async with pool.acquire() as con:
+            res = await con.execute("DELETE FROM baby_checklist WHERE id = $1", int(cid))
+        try:
+            return int(res.split()[-1]) > 0
+        except (ValueError, IndexError):
+            return False
+
+    async def reset_checklist(self) -> None:
+        pool = await self._get_pool()
+        async with pool.acquire() as con:
+            await con.execute(
+                "UPDATE baby_checklist SET done = 0, done_at = NULL, updated_at = $1",
+                _now_iso(),
+            )
 
     async def reset(self) -> None:
         pool = await self._get_pool()

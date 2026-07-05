@@ -16,7 +16,7 @@ from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from . import assessment, ingest, notify
+from . import assessment, ingest, notify, supplies
 from .config import Config
 from .db import Database
 from .mqtt import MqttBridge
@@ -49,6 +49,61 @@ class NoteIn(BaseModel):
     special: bool = False
 
 
+# Fields a client may set on a supply (create + patch); server-managed columns
+# (low_notified/created_at/updated_at/last_refill_at) are excluded.
+_SUPPLY_EDITABLE = (
+    "category", "name", "brand", "type", "quantity", "unit", "low_threshold",
+    "refill_days", "consume_event_type", "consume_event_subtype", "consume_amount",
+)
+
+
+class SupplyIn(BaseModel):
+    category: str = "other"
+    name: str
+    brand: str | None = None
+    type: str | None = None
+    quantity: float = 0
+    unit: str | None = None
+    low_threshold: float | None = None
+    refill_days: int | None = None
+    consume_event_type: str | None = None
+    consume_event_subtype: str | None = None
+    consume_amount: float = 1
+
+
+class SupplyPatch(BaseModel):
+    category: str | None = None
+    name: str | None = None
+    brand: str | None = None
+    type: str | None = None
+    quantity: float | None = None
+    unit: str | None = None
+    low_threshold: float | None = None
+    refill_days: int | None = None
+    consume_event_type: str | None = None
+    consume_event_subtype: str | None = None
+    consume_amount: float | None = None
+
+
+class AdjustIn(BaseModel):
+    delta: float | None = None  # relative change (+/-)
+    set: float | None = None    # absolute value
+
+
+class RefillIn(BaseModel):
+    quantity: float | None = None  # new stock level; omit to keep current
+
+
+class ChecklistIn(BaseModel):
+    label: str
+
+
+class ChecklistPatch(BaseModel):
+    label: str | None = None
+    done: bool | None = None
+    position: int | None = None
+
+
 def create_app(cfg: Config | None = None) -> FastAPI:
     cfg = cfg or Config.load()
     db = Database(cfg.db_path, cfg.timezone, cfg.database_url)
@@ -64,6 +119,12 @@ def create_app(cfg: Config | None = None) -> FastAPI:
             reminders.arm_pump(row.get("event_subtype") or "?")
         elif logged_at is None and event_type == "feed":
             reminders.arm_feed(row.get("event_subtype") or "")
+        # Auto-decrement supplies whose consume rule matches this LIVE event
+        # (backfilled past events don't consume — SDD-002 §4.1). Fire a one-shot
+        # low reminder for any item that just crossed its threshold.
+        if logged_at is None and event_type != "supply":
+            for s in await supplies.apply_consumption(db, event_type, row.get("event_subtype")):
+                await reminders.fire_supply_reminder(s, ["low"])
         snapshot = compute(await db.recent(), cfg.timezone)
         await mqtt.publish_state(snapshot["stats"])
         # Refresh the device OLED rows + alert flag immediately (don't wait for
@@ -171,6 +232,104 @@ def create_app(cfg: Config | None = None) -> FastAPI:
     async def post_reset():
         await db.reset()
         await mqtt.publish_state(compute([], cfg.timezone)["stats"])
+        return {"ok": True}
+
+    # --- UI config (which tab to open on, etc.) ----------------------------
+    @app.get("/api/config")
+    async def get_config():
+        valid = {"get_ready", "baby", "contractions", "health", "growth", "supplies"}
+        tab = cfg.default_tab if cfg.default_tab in valid else "baby"
+        return {"default_tab": tab}
+
+    # --- supplies ----------------------------------------------------------
+    @app.get("/api/supplies")
+    async def list_supplies():
+        return {"supplies": supplies.annotate_list(await db.list_supplies())}
+
+    @app.post("/api/supplies")
+    async def create_supply(s: SupplyIn):
+        row = await db.insert_supply(s.model_dump())
+        return {"ok": True, "supply": supplies.annotate(row)}
+
+    @app.patch("/api/supplies/{sid}")
+    async def patch_supply(sid: int, s: SupplyPatch):
+        if not await db.get_supply(sid):
+            return JSONResponse({"ok": False, "error": "not found"}, status_code=404)
+        fields = {k: getattr(s, k) for k in s.model_fields_set if k in _SUPPLY_EDITABLE}
+        row = await db.update_supply(sid, **fields)
+        if "quantity" in fields or "low_threshold" in fields:
+            row = await supplies.reconcile_low_flag(db, sid)
+        return {"ok": True, "supply": supplies.annotate(row)}
+
+    @app.post("/api/supplies/{sid}/adjust")
+    async def adjust_supply(sid: int, a: AdjustIn):
+        cur = await db.get_supply(sid)
+        if not cur:
+            return JSONResponse({"ok": False, "error": "not found"}, status_code=404)
+        if a.set is not None:
+            new_qty = max(0.0, a.set)
+        else:
+            new_qty = max(0.0, (cur.get("quantity") or 0) + (a.delta or 0))
+        await db.update_supply(sid, quantity=new_qty)
+        row = await supplies.reconcile_low_flag(db, sid)
+        return {"ok": True, "supply": supplies.annotate(row)}
+
+    @app.post("/api/supplies/{sid}/refill")
+    async def refill_supply(sid: int, r: RefillIn):
+        cur = await db.get_supply(sid)
+        if not cur:
+            return JSONResponse({"ok": False, "error": "not found"}, status_code=404)
+        import datetime as _dt
+        kwargs = {"last_refill_at": _dt.datetime.now(_dt.timezone.utc).isoformat(),
+                  "low_notified": 0}
+        if r.quantity is not None:
+            kwargs["quantity"] = max(0.0, r.quantity)
+        row = await db.update_supply(sid, **kwargs)
+        # Log the refill to the shared journal (also fires baby/event).
+        await ingest_and_broadcast("supply", cur.get("category"),
+                                   f"Refilled {cur.get('name')}", "api")
+        return {"ok": True, "supply": supplies.annotate(row)}
+
+    @app.delete("/api/supplies/{sid}")
+    async def remove_supply(sid: int):
+        if not await db.delete_supply(sid):
+            return JSONResponse({"ok": False, "error": "not found"}, status_code=404)
+        return {"ok": True}
+
+    # --- Get Ready checklist ----------------------------------------------
+    @app.get("/api/checklist")
+    async def get_checklist():
+        return {"items": await db.list_checklist()}
+
+    @app.post("/api/checklist")
+    async def add_checklist(c: ChecklistIn):
+        row = await db.insert_checklist(c.label)
+        return {"ok": True, "item": row}
+
+    @app.patch("/api/checklist/{cid}")
+    async def patch_checklist(cid: int, c: ChecklistPatch):
+        if not await db.get_checklist_item(cid):
+            return JSONResponse({"ok": False, "error": "not found"}, status_code=404)
+        kwargs = {}
+        fields = c.model_fields_set
+        if "label" in fields and c.label is not None:
+            kwargs["label"] = c.label
+        if "done" in fields and c.done is not None:
+            kwargs["done"] = c.done
+        if "position" in fields and c.position is not None:
+            kwargs["position"] = c.position
+        row = await db.update_checklist(cid, **kwargs)
+        return {"ok": True, "item": row}
+
+    @app.delete("/api/checklist/{cid}")
+    async def remove_checklist(cid: int):
+        if not await db.delete_checklist(cid):
+            return JSONResponse({"ok": False, "error": "not found"}, status_code=404)
+        return {"ok": True}
+
+    @app.post("/api/checklist/reset")
+    async def reset_checklist():
+        await db.reset_checklist()
         return {"ok": True}
 
     if WEB_DIR.is_dir():

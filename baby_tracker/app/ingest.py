@@ -20,6 +20,7 @@ ICONS = {
     "pump": "🤱",
     "note": "📝",
     "contraction": "⏱️",
+    "supply": "🧴",
 }
 
 

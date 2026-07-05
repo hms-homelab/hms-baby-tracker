@@ -199,6 +199,7 @@ html, body {
 .journal-list { list-style: none; margin: 0; padding: 0; }
 .journal-list li {
   display: flex;
+  flex-wrap: wrap;
   justify-content: space-between;
   align-items: baseline;
   gap: 10px;
@@ -278,3 +279,158 @@ html, body {
   cursor: pointer;
 }
 .btn-reset:active { opacity: 0.7; }
+
+/* ============ Tabs (SDD-002) ============ */
+.tabs {
+  display: flex;
+  gap: 7px;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+  padding: 2px 2px 12px;
+  margin: 0 -2px;
+}
+.tabs::-webkit-scrollbar { display: none; }
+.tab {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  border: 1px solid var(--line-2);
+  background: var(--surface);
+  color: var(--muted);
+  border-radius: 999px;
+  padding: 9px 14px;
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+  -webkit-tap-highlight-color: transparent;
+  transition: color 0.12s ease, border-color 0.12s ease, background 0.12s ease;
+}
+.tab.active {
+  color: #1A1822;
+  background: linear-gradient(180deg, var(--glow), var(--glow-deep));
+  border-color: transparent;
+}
+.tab:disabled { opacity: 0.5; cursor: default; }
+.tab .soon {
+  font-size: 8px;
+  font-family: var(--mono);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  padding: 1px 5px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--glow) 18%, transparent);
+  color: var(--glow);
+}
+.panel[hidden] { display: none; }
+
+/* ============ Contractions ============ */
+.ctx-readout {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--glow);
+  background: color-mix(in srgb, var(--glow) 8%, transparent);
+  border: 1px solid color-mix(in srgb, var(--glow) 22%, transparent);
+  border-radius: 12px;
+  padding: 10px 12px;
+  margin-bottom: 13px;
+}
+.ctx-grid { grid-template-columns: repeat(3, 1fr); }
+.ctx-tile { min-height: 108px; }
+.ctx-tile .ico { width: 52px; height: 52px; font-size: 26px; border-radius: 15px; }
+.ctx-tile .lbl { font-size: 14px; }
+
+/* ============ Supplies ============ */
+.manual-row input[type="number"] {
+  flex: 1;
+  min-width: 0;
+  border: 1px solid var(--line-2);
+  border-radius: 11px;
+  padding: 11px 12px;
+  font-size: 14px;
+  font-family: var(--mono);
+  background: var(--surface);
+  color: var(--ink);
+}
+.manual-row .cb {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--muted);
+}
+.manual-row .cb input { width: 18px; height: 18px; accent-color: var(--glow); }
+.supply-list { list-style: none; margin: 0; padding: 0; }
+.supply-row {
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 12px;
+  margin-bottom: 10px;
+  background: var(--surface-2);
+}
+.supply-row:last-child { margin-bottom: 0; }
+.supply-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.supply-name { font-size: 14px; font-weight: 700; color: var(--ink); }
+.supply-qty { font-family: var(--mono); font-size: 14px; color: var(--glow); white-space: nowrap; }
+.supply-badges { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.badge {
+  font-size: 10px;
+  font-weight: 700;
+  padding: 3px 8px;
+  border-radius: 999px;
+  font-family: var(--mono);
+}
+.badge.low { background: rgba(224, 107, 107, 0.16); color: #e88b8b; border: 1px solid rgba(224, 107, 107, 0.34); }
+.badge.due { background: rgba(232, 168, 78, 0.16); color: var(--glow); border: 1px solid rgba(232, 168, 78, 0.34); }
+.badge.muted { background: transparent; color: var(--faint); border: 1px solid var(--line-2); }
+.supply-actions { display: flex; gap: 7px; margin-top: 11px; }
+.supply-btn {
+  flex: 1;
+  border: 1px solid var(--line-2);
+  background: var(--surface);
+  color: var(--ink);
+  border-radius: 10px;
+  padding: 9px 6px;
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.supply-btn.s-minus, .supply-btn.s-plus { flex: 0 0 44px; font-size: 17px; }
+.supply-btn.s-refill { color: var(--glow); border-color: color-mix(in srgb, var(--glow) 30%, transparent); }
+.supply-btn.s-del { color: #e89b8b; border-color: rgba(232, 155, 139, 0.3); }
+.supply-btn:active { transform: translateY(1px); opacity: 0.9; }
+
+/* ============ Get Ready checklist ============ */
+.checklist { list-style: none; margin: 0 0 12px; padding: 0; }
+.check-row {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 11px 4px;
+  border-bottom: 1px solid var(--line);
+}
+.check-row:last-child { border-bottom: none; }
+.check-row input[type="checkbox"] {
+  width: 21px;
+  height: 21px;
+  accent-color: var(--good);
+  flex: 0 0 auto;
+}
+.check-label { flex: 1; font-size: 15px; color: var(--ink); }
+.check-row.done .check-label { color: var(--faint); text-decoration: line-through; }
+.check-del {
+  flex: 0 0 auto;
+  border: none;
+  background: transparent;
+  color: var(--faint);
+  font-size: 20px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 2px 6px;
+}
+.check-del:active { color: #e89b8b; }

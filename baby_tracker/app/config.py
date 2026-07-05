@@ -28,6 +28,15 @@ class Config:
     pump_hours: float = 2.0
     feed_hours: float = 3.0
     notify_targets: list[str] = field(default_factory=list)
+    # UI: which tab the Ingress SPA opens on (get_ready|baby|contractions|
+    # health|growth|supplies). Changeable so an install can lead with
+    # contractions/get_ready pre-birth and switch to baby after.
+    default_tab: str = "baby"
+    # Supplies: local hour (0-23) for the daily low/refill-due reminder sweep.
+    supply_reminder_hour: int = 9
+    # Get Ready checklist: local hour to auto-uncheck the list. 0 = off (the
+    # seeded items are mostly one-time prep, so daily reset is opt-in).
+    checklist_reset_hour: int = 0
     # storage
     data_dir: Path = Path(os.environ.get("DATA_DIR", "/data"))
     database_url: str | None = None  # optional external Postgres (unused in v1 SQLite path)
@@ -59,6 +68,11 @@ class Config:
             pump_hours=float(opts.get("pump_hours", env.get("PUMP_HOURS", 2.0))),
             feed_hours=float(opts.get("feed_hours", env.get("FEED_HOURS", 3.0))),
             notify_targets=opts.get("notify_targets") or _split(env.get("NOTIFY_TARGETS")),
+            default_tab=(opts.get("default_tab") or env.get("DEFAULT_TAB") or "baby"),
+            supply_reminder_hour=int(opts.get("supply_reminder_hour",
+                                              env.get("SUPPLY_REMINDER_HOUR", 9))),
+            checklist_reset_hour=int(opts.get("checklist_reset_hour",
+                                              env.get("CHECKLIST_RESET_HOUR", 0))),
             data_dir=Path(env.get("DATA_DIR", "/data")),
             database_url=opts.get("database_url") or env.get("DATABASE_URL") or None,
             # Supervisor service (env vars exported by run.sh) is PRIMARY; the

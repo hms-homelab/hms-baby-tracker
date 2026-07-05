@@ -39,6 +39,7 @@ DISPLAY_TOPIC = "baby/remote/display"
 ALERT_TOPIC = "baby/remote/alert"
 REMINDER_TOPIC = "baby/remote/reminder"
 ASSESSMENT_TOPIC = "baby/assessment"  # retained {"text","time"} contraction AI assessment
+SUPPLY_REMINDER_TOPIC = "baby/supply/reminder"  # non-retained {"title","message","supply"}
 HISTORY_CHUNK = 200  # events per replay message
 DISCOVERY_PREFIX = "homeassistant"
 
@@ -251,6 +252,24 @@ class MqttBridge:
                                        qos=0, retain=True)
         except aiomqtt.MqttError as e:
             log.warning("publish_assessment failed: %s", e)
+
+    async def publish_supply_reminder(self, title: str, message: str,
+                                      supply: dict | None = None) -> None:
+        """Fire a supply low/refill-due reminder on `baby/supply/reminder`.
+
+        Non-retained fire-once signal for HA MQTT-trigger automations, mirroring
+        `baby/event`. Best effort; no-op until the broker is connected.
+        """
+        if self._client is None:
+            return
+        payload = {"title": title, "message": message}
+        if supply is not None:
+            payload["supply"] = {k: supply.get(k) for k in ("id", "category", "name")}
+        try:
+            await self._client.publish(SUPPLY_REMINDER_TOPIC, json.dumps(payload),
+                                       qos=0, retain=False)
+        except aiomqtt.MqttError as e:
+            log.warning("publish_supply_reminder failed: %s", e)
 
     async def publish_reminder(self, l1: str, l2: str, secs: int = 4) -> None:
         """Pop a transient two-line banner on the device OLED.

@@ -1,5 +1,45 @@
 # Changelog
 
+## 2026.4.0 - 2026-07-05
+
+Tabbed redesign + Supplies + a Get Ready checklist (SDD-002, phase 1). The web
+UI now has a pinned summary on top, a tab bar, and a pinned journal below that
+still logs everything across tabs.
+
+- **feat: tabs.** The Ingress UI is organized into **Get Ready**, **Baby**,
+  **Contractions**, and **Supplies** tabs (Health + Growth land in 2026.5.0).
+  The tab the app opens on is a new **`default_tab`** option (default `baby`) —
+  set it to `contractions` or `get_ready` to lead with the pre-birth phase, then
+  switch to `baby` after the arrival. `GET /api/config` exposes it to the UI.
+
+- **feat: Get Ready checklist.** An open, editable prep list seeded with popular
+  suggestions (crib, diaper bag, newborn clothes, bottles, wipes + cream, car
+  seat), with a progress readout and a manual **Uncheck all**. Optional daily
+  auto-reset via **`checklist_reset_hour`** (0 = off). New `baby_checklist` table
+  + `GET/POST/PATCH/DELETE /api/checklist` + `/api/checklist/reset`.
+
+- **feat: Contractions tab.** Three big severity buttons — **Mild** (green),
+  **Medium** (orange), **Intense** (red) — plus a note and a contraction
+  backfill, and a live "N in last 2h · last X min ago · avg gap" readout. Rides
+  on the existing `contraction` event + Ollama assessment; `medium` is a new
+  intensity alias for `moderate`.
+
+- **feat: Supplies.** Register consumables (formula, diapers, wipes, creams,
+  other) with quantity + brand + type. Each can **auto-count-down** from a
+  matching baby event (e.g. a bottle feed decrements formula) and remind you to
+  refill by a **low-stock threshold** and/or a **days cadence** (whichever fires
+  first). Manual −/＋ and Refill too; refills are logged to the journal. New
+  `baby_supplies` table + `/api/supplies` CRUD + `/adjust` + `/refill`, a daily
+  reminder sweep at **`supply_reminder_hour`** (default 9), and a
+  `baby/supply/reminder` MQTT topic for HA automations.
+
+- **fix: journal row editor.** Opening the inline editor on a row that has a
+  note no longer squeezes the label into a one-character-per-line column — the
+  editor wraps onto its own full-width line. Tapping an open row now **collapses**
+  it (and opening another row closes the first).
+- Backfilled/edited past events do not auto-decrement supplies (only live ones).
+- New tables auto-create on existing installs; existing events are untouched.
+
 ## 2026.3.1 - 2026-07-05
 
 - **feat: distinct breast vs bottle icons.** Answers the follow-up on
