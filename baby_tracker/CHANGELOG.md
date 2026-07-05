@@ -1,5 +1,18 @@
 # Changelog
 
+## 2026.3.1 - 2026-07-05
+
+- **feat: distinct breast vs bottle icons.** Answers the follow-up on
+  [#1](https://github.com/hms-homelab/hms-baby-tracker/issues/1). Breast feeds now
+  show 🤱 and bottle feeds 🍼 across the buttons, journal and manual-entry
+  dropdown, so the two read apart at a glance. Pump keys move to 🫙 (matching the
+  summary and journal) and the diaper "Change" key to 🔄.
+
+- **feat: attach/edit a note when editing a logged event.** Also from
+  [#1](https://github.com/hms-homelab/hms-baby-tracker/issues/1). The inline row
+  editor now has a note field, pre-filled with the event's existing note, saved
+  alongside the time via `PATCH api/event/{id}`.
+
 ## 2026.3.0 - 2026-06-24
 
 - **feat: "nocturnal nursery" dashboard redesign.** The Ingress web UI now matches

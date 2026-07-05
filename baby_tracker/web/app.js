@@ -22,19 +22,19 @@
   // --- Button definitions: [label, color, {event_type, event_subtype?}, emoji, light?] ---
   var GROUPS = {
     "grp-feed": [
-      ["Breast", "#e8a0bf", { event_type: "feed", event_subtype: "breast" }, "🍼"],
+      ["Breast", "#e8a0bf", { event_type: "feed", event_subtype: "breast" }, "🤱"],
       ["Bottle", "#a0c4e8", { event_type: "feed", event_subtype: "bottle" }, "🍼"],
       ["Solid", "#c4e8a0", { event_type: "feed", event_subtype: "solid" }, "🍎"],
     ],
     "grp-pump": [
-      ["Pump L", "#d4a0e8", { event_type: "pump", event_subtype: "left" }, "🤱"],
-      ["Pump R", "#d4a0e8", { event_type: "pump", event_subtype: "right" }, "🤱"],
+      ["Pump L", "#d4a0e8", { event_type: "pump", event_subtype: "left" }, "🫙"],
+      ["Pump R", "#d4a0e8", { event_type: "pump", event_subtype: "right" }, "🫙"],
     ],
     "grp-diaper": [
       ["Pee", "#f0e68c", { event_type: "diaper", event_subtype: "pee" }, "💧"],
       ["Poop", "#d2a679", { event_type: "diaper", event_subtype: "poop" }, "💩"],
       ["Both", "#e8c8a0", { event_type: "diaper", event_subtype: "both" }, "✅"],
-      ["Change", "#c8b89a", { event_type: "diaper", event_subtype: "change" }, "🍼"],
+      ["Change", "#c8b89a", { event_type: "diaper", event_subtype: "change" }, "🔄"],
     ],
     "grp-other": [
       ["Sleep Start", "#b0a0e8", { event_type: "sleep", event_subtype: "start" }, "😴", true],
@@ -155,7 +155,7 @@
       return "🫙 Pump" + fmtType(sub);
     }
     if (type === "feed") {
-      if (sub === "breast") return "🍼 Breast feed";
+      if (sub === "breast") return "🤱 Breast feed";
       if (sub === "bottle") return "🍼 Bottle feed";
       if (sub === "solid") return "🍎 Solid food";
       return "🍼 Feed" + fmtType(sub);
@@ -228,13 +228,19 @@
     time.type = "datetime-local";
     time.value = entry.logged_at ? isoToLocalInput(entry.logged_at) : nowLocalInput();
 
+    var note = document.createElement("input");
+    note.type = "text";
+    note.className = "j-note-edit";
+    note.placeholder = "Note (optional)";
+    note.value = entry.note || "";
+
     var save = document.createElement("button");
     save.className = "j-save";
     save.textContent = "Save";
     save.addEventListener("click", function () {
       var iso = localInputToIso(time.value);
       if (!iso) { setStatus("Invalid date/time", true); return; }
-      apiPatch("api/event/" + entry.id, { logged_at: iso })
+      apiPatch("api/event/" + entry.id, { logged_at: iso, note: note.value.trim() })
         .then(function () { editingId = null; setStatus("Updated ✓"); return refresh(); })
         .catch(function (err) { setStatus("Failed (" + err.message + ")", true); });
     });
@@ -260,6 +266,7 @@
     });
 
     box.appendChild(time);
+    box.appendChild(note);
     box.appendChild(save);
     box.appendChild(del);
     box.appendChild(cancel);

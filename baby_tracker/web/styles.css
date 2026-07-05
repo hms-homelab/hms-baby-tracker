@@ -235,7 +235,8 @@ html, body {
   gap: 8px;
   margin-top: 10px;
 }
-.j-edit input[type="datetime-local"] {
+.j-edit input[type="datetime-local"],
+.j-edit input[type="text"] {
   flex: 1 1 100%;
   min-width: 0;
   border: 1px solid var(--line-2);
@@ -247,6 +248,7 @@ html, body {
   color: var(--ink);
   color-scheme: dark;
 }
+.j-edit input[type="text"] { font-family: inherit; }
 .j-edit button {
   flex: 1;
   border: none;
