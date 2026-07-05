@@ -88,6 +88,7 @@
   var noteSpecial = false;      // shared note bar ⭐ toggle state
   var generatingSummary = false; // AI summary in flight (don't clobber the button)
   var addonSlug = "";           // this add-on's Supervisor slug (config deep link)
+  var appTz = "";               // add-on's IANA timezone (anchors the datetime pickers)
   var PANELS = { get_ready: 1, baby: 1, contractions: 1, health: 1, growth: 1, supplies: 1 };
 
   // --- Networking ---------------------------------------------------------
@@ -116,20 +117,60 @@
   function apiPatch(path, body) { return apiSend("PATCH", path, body || {}); }
   function apiDelete(path) { return apiSend("DELETE", path); }
 
-  // --- Date/time helpers (UTC ISO <-> <input type=datetime-local> local) --
+  // --- Date/time helpers (UTC ISO <-> <input type=datetime-local>) ---------
+  // The datetime-local widget is a naive wall clock. We anchor it to the
+  // ADD-ON's configured timezone (appTz), NOT the viewing device's, so the
+  // picker always matches the server-formatted journal times (issue #2). Falls
+  // back to the browser's local time when appTz is unknown/unsupported.
   function pad(n) { return (n < 10 ? "0" : "") + n; }
-  function toLocalInput(d) {
+  function browserInput(d) {
     return d.getFullYear() + "-" + pad(d.getMonth() + 1) + "-" + pad(d.getDate()) +
       "T" + pad(d.getHours()) + ":" + pad(d.getMinutes());
   }
+  // Wall-clock "YYYY-MM-DDTHH:MM" of instant `d` in the given IANA tz.
+  function tzInput(d, tz) {
+    try {
+      var f = new Intl.DateTimeFormat("en-CA", {
+        timeZone: tz, year: "numeric", month: "2-digit", day: "2-digit",
+        hour: "2-digit", minute: "2-digit", hour12: false,
+      });
+      var p = {};
+      f.formatToParts(d).forEach(function (x) { p[x.type] = x.value; });
+      var h = (p.hour === "24") ? "00" : p.hour;   // some engines emit 24 at midnight
+      return p.year + "-" + p.month + "-" + p.day + "T" + h + ":" + p.minute;
+    } catch (e) { return browserInput(d); }
+  }
+  // Minutes tz is ahead of UTC at `date` (DST-correct).
+  function tzOffsetMin(date, tz) {
+    var f = new Intl.DateTimeFormat("en-US", {
+      timeZone: tz, hour12: false, year: "numeric", month: "2-digit",
+      day: "2-digit", hour: "2-digit", minute: "2-digit", second: "2-digit",
+    });
+    var p = {};
+    f.formatToParts(date).forEach(function (x) { p[x.type] = x.value; });
+    var h = (p.hour === "24") ? "00" : p.hour;
+    var asUTC = Date.UTC(+p.year, +p.month - 1, +p.day, +h, +p.minute, +p.second);
+    return Math.round((asUTC - date.getTime()) / 60000);
+  }
+  function toLocalInput(d) { return appTz ? tzInput(d, appTz) : browserInput(d); }
   function nowLocalInput() { return toLocalInput(new Date()); }
   function isoToLocalInput(iso) {
     var d = new Date(iso);
     return isNaN(d.getTime()) ? nowLocalInput() : toLocalInput(d);
   }
   function localInputToIso(val) {
-    var d = new Date(val);
-    return isNaN(d.getTime()) ? null : d.toISOString();
+    if (!val) return null;
+    if (!appTz) { var d = new Date(val); return isNaN(d.getTime()) ? null : d.toISOString(); }
+    var m = val.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/);
+    if (!m) return null;
+    // Treat the picker value as wall-clock in appTz, then convert to UTC.
+    var asUtc = Date.UTC(+m[1], +m[2] - 1, +m[3], +m[4], +m[5]);
+    try {
+      var off = tzOffsetMin(new Date(asUtc), appTz);
+      return new Date(asUtc - off * 60000).toISOString();
+    } catch (e) {
+      var b = new Date(val); return isNaN(b.getTime()) ? null : b.toISOString();
+    }
   }
 
   // --- Summary + journal rendering ---------------------------------------
@@ -1043,6 +1084,13 @@
         if (c && typeof c.fever_threshold_c === "number") feverThresholdC = c.fever_threshold_c;
         if (c && c.measurement_system) imperial = (c.measurement_system === "imperial");
         if (c && c.addon_slug) addonSlug = c.addon_slug;
+        if (c && c.timezone) appTz = c.timezone;
+        // The add/backfill pickers were pre-filled with "now" before appTz
+        // arrived; refresh them so their default is in the add-on's timezone.
+        ["manual-time", "growth-time", "ctx-backfill-time"].forEach(function (id) {
+          var el = document.getElementById(id);
+          if (el) el.value = nowLocalInput();
+        });
         applyMeasurementDefaults();
         activateTab(pickInitialTab(c && c.default_tab));
       })

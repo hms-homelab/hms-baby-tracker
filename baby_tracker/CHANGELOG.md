@@ -1,5 +1,16 @@
 # Changelog
 
+## 2026.4.4 - 2026-07-05
+
+- **fix: edit-time picker showed the wrong time**
+  ([#2](https://github.com/hms-homelab/hms-baby-tracker/issues/2)). The
+  date/time pickers now anchor to the add-on's configured `timezone` (exposed
+  via `GET /api/config`) instead of the viewing device's, so they match the
+  journal times regardless of where you're viewing from or what timezone your
+  phone/browser is set to.
+- **fix: journal times drop the leading zero** on the hour (`7:42 PM`, not
+  `07:42 PM`).
+
 ## 2026.4.3 - 2026-07-05
 
 - **feat: AI daily summaries (SDD-003).** A warm, plain-language recap of the

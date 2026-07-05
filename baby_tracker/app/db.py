@@ -54,7 +54,11 @@ def _fmt_time(iso: str, tz: ZoneInfo) -> str:
         return iso
     if d.tzinfo is None:
         d = d.replace(tzinfo=dt.timezone.utc)
-    return d.astimezone(tz).strftime(_TIME_FMT)
+    d = d.astimezone(tz)
+    # 12h clock WITHOUT a leading zero on the hour (issue #2: "7:42 PM", not "07:42 PM").
+    h12 = d.hour % 12 or 12
+    ampm = "PM" if d.hour >= 12 else "AM"
+    return f"{h12}:{d.minute:02d} {ampm}, {d.strftime('%b %d')}"
 
 
 def _is_postgres(url: str | None) -> bool:

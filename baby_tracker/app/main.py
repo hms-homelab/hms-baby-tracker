@@ -349,7 +349,7 @@ def create_app(cfg: Config | None = None) -> FastAPI:
         system = cfg.measurement_system if cfg.measurement_system in ("imperial", "metric") else "imperial"
         return {"default_tab": tab, "fever_threshold_c": cfg.fever_threshold_c,
                 "measurement_system": system, "summary_enabled": cfg.summary_enabled,
-                "addon_slug": await addon_slug()}
+                "timezone": cfg.timezone, "addon_slug": await addon_slug()}
 
     # --- AI daily summary (SDD-003) ---------------------------------------
     @app.get("/api/summary")
