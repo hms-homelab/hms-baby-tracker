@@ -1,0 +1,30 @@
+name: Auto-assign issues
+
+# Assign every newly opened (or reopened) issue to the maintainer so nothing
+# slips through unnoticed. Skips issues that already have an assignee.
+on:
+  issues:
+    types: [opened, reopened]
+
+permissions:
+  issues: write
+
+jobs:
+  assign:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/github-script@v7
+        with:
+          script: |
+            const assignee = 'aamat09';
+            if (context.payload.issue.assignees && context.payload.issue.assignees.length > 0) {
+              core.info('Issue already has an assignee; leaving it.');
+              return;
+            }
+            await github.rest.issues.addAssignees({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              assignees: [assignee],
+            });
+            core.info(`Assigned #${context.issue.number} to ${assignee}.`);
