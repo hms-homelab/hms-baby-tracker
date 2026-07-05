@@ -53,9 +53,11 @@ class Config:
     # UI unit defaults: "imperial" (°F, lb/oz, in) or "metric" (°C, kg, cm).
     # Per-entry unit is still stored, so this only sets the default pickers.
     measurement_system: str = "imperial"
-    # AI daily summaries (SDD-003). Hosted proxy is live (babytracker.shmaestro.com),
-    # so it ships on-by-default; a first-run in-app notice points to the opt-out.
-    summary_enabled: bool = True
+    # AI daily summaries (SDD-003). Opt-in: OFF by default so nothing leaves the
+    # add-on until the user explicitly enables it (a 3rd-party call, even
+    # de-identified, should never be on without consent). Hosted proxy is live at
+    # babytracker.shmaestro.com; a first-run in-app notice explains the trade-off.
+    summary_enabled: bool = False
     summary_provider: str = "hosted"   # hosted|ollama|anthropic|openai|gemini
     summary_hour: int = 6              # local hour for the auto digest; 0 = on-demand only
     summary_daily_cap: int = 2

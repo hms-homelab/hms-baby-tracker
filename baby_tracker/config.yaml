@@ -32,7 +32,7 @@ options:
   checklist_reset_hour: 0
   fever_threshold_c: 38.0
   measurement_system: imperial
-  summary_enabled: true
+  summary_enabled: false
   summary_provider: hosted
   summary_hour: 6
   summary_daily_cap: 2
