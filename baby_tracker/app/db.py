@@ -120,6 +120,16 @@ CREATE TABLE IF NOT EXISTS baby_checklist (
     done_at    TEXT,
     updated_at TEXT NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS baby_summaries (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    text         TEXT NOT NULL,
+    provider     TEXT,
+    source       TEXT,
+    generated_at TEXT NOT NULL,
+    day          TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_baby_summaries_day ON baby_summaries (day);
 """
 
 
@@ -451,6 +461,44 @@ class SqliteDatabase:
             )
             await db.commit()
 
+    # --- AI summaries ------------------------------------------------------
+    async def insert_summary(self, text: str, provider: str, source: str,
+                             day: str) -> dict:
+        import aiosqlite
+
+        now = _now_iso()
+        async with aiosqlite.connect(self.path) as db:
+            cur = await db.execute(
+                "INSERT INTO baby_summaries (text, provider, source, generated_at, day) "
+                "VALUES (?, ?, ?, ?, ?)",
+                (text, provider, source, now, day),
+            )
+            await db.commit()
+            sid = cur.lastrowid
+        return {"id": sid, "text": text, "provider": provider, "source": source,
+                "generated_at": now, "day": day}
+
+    async def latest_summary(self) -> dict | None:
+        import aiosqlite
+
+        async with aiosqlite.connect(self.path) as db:
+            db.row_factory = aiosqlite.Row
+            cur = await db.execute(
+                "SELECT * FROM baby_summaries ORDER BY generated_at DESC LIMIT 1"
+            )
+            r = await cur.fetchone()
+        return dict(r) if r else None
+
+    async def count_summaries_today(self, day: str) -> int:
+        import aiosqlite
+
+        async with aiosqlite.connect(self.path) as db:
+            cur = await db.execute(
+                "SELECT COUNT(*) FROM baby_summaries WHERE day = ?", (day,)
+            )
+            (n,) = await cur.fetchone()
+        return int(n)
+
 
 def _num_or_none(v):
     if v is None or v == "":
@@ -519,6 +567,16 @@ CREATE TABLE IF NOT EXISTS baby_checklist (
     done_at    text,
     updated_at text NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS baby_summaries (
+    id           bigserial PRIMARY KEY,
+    text         text NOT NULL,
+    provider     text,
+    source       text,
+    generated_at text NOT NULL,
+    day          text NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_baby_summaries_day ON baby_summaries (day);
 """
 
 
@@ -828,6 +886,35 @@ class PostgresDatabase:
                 "UPDATE baby_checklist SET done = 0, done_at = NULL, updated_at = $1",
                 _now_iso(),
             )
+
+    # --- AI summaries ------------------------------------------------------
+    async def insert_summary(self, text: str, provider: str, source: str,
+                             day: str) -> dict:
+        now = _now_iso()
+        pool = await self._get_pool()
+        async with pool.acquire() as con:
+            row = await con.fetchrow(
+                "INSERT INTO baby_summaries (text, provider, source, generated_at, day) "
+                "VALUES ($1, $2, $3, $4, $5) RETURNING *",
+                text, provider, source, now, day,
+            )
+        return dict(row)
+
+    async def latest_summary(self) -> dict | None:
+        pool = await self._get_pool()
+        async with pool.acquire() as con:
+            r = await con.fetchrow(
+                "SELECT * FROM baby_summaries ORDER BY generated_at DESC LIMIT 1"
+            )
+        return dict(r) if r else None
+
+    async def count_summaries_today(self, day: str) -> int:
+        pool = await self._get_pool()
+        async with pool.acquire() as con:
+            n = await con.fetchval(
+                "SELECT COUNT(*) FROM baby_summaries WHERE day = $1", day
+            )
+        return int(n)
 
     async def reset(self) -> None:
         pool = await self._get_pool()

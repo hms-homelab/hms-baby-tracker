@@ -26,7 +26,20 @@
       <div class="sum-line" id="sum-track">⏱️ Contractions: 0 | 🎒 Ready: 0/0</div>
       <div class="sum-line" id="sum-vitals">🌡️ Temp: — | 📈 Weight: —</div>
       <div class="sum-line sum-alert" id="sum-alert" hidden></div>
+      <div class="sum-ai" id="sum-ai" hidden>
+        <div class="ai-text" id="ai-text"></div>
+        <div class="ai-foot">
+          <span class="ai-meta" id="ai-meta"></span>
+          <button type="button" class="ai-btn" id="ai-generate">Summarize now</button>
+        </div>
+      </div>
     </section>
+
+    <!-- First-run AI privacy notice (shown once per device when AI is on) -->
+    <div class="ai-notice" id="ai-notice" hidden>
+      <span>🤖 AI summaries are on. A once-daily <strong>anonymized</strong> recap (counts and trends, never names or notes) is sent to the hosted summary service. Switch the provider or turn it off in <a href="#" id="ai-config-link">Configuration</a>.</span>
+      <button type="button" id="ai-notice-dismiss">Got it</button>
+    </div>
 
     <!-- Tab bar (horizontally scrollable) -->
     <nav class="tabs" id="tabs" role="tablist" aria-label="Sections">

@@ -86,6 +86,8 @@
   var feverThresholdC = 38.0;  // from /api/config
   var imperial = true;          // from /api/config measurement_system
   var noteSpecial = false;      // shared note bar ⭐ toggle state
+  var generatingSummary = false; // AI summary in flight (don't clobber the button)
+  var addonSlug = "";           // this add-on's Supervisor slug (config deep link)
   var PANELS = { get_ready: 1, baby: 1, contractions: 1, health: 1, growth: 1, supplies: 1 };
 
   // --- Networking ---------------------------------------------------------
@@ -368,6 +370,72 @@
     el.textContent = recent.length + " in last 2h · last " + lastMin + " min ago" + gap;
   }
 
+  // --- AI daily summary ---------------------------------------------------
+  function fmtClock(iso) {
+    var d = new Date(iso);
+    if (isNaN(d.getTime())) return "";
+    var m = (d.getMinutes() < 10 ? "0" : "") + d.getMinutes();
+    return (d.getHours() % 12 || 12) + ":" + m + (d.getHours() >= 12 ? " PM" : " AM");
+  }
+  function loadSummary() {
+    return apiGet("api/summary").then(renderAiSummary).catch(function () {});
+  }
+  function renderAiSummary(data) {
+    var box = document.getElementById("sum-ai");
+    var notice = document.getElementById("ai-notice");
+    if (!box) return;
+    if (!data || !data.enabled) { box.hidden = true; if (notice) notice.hidden = true; return; }
+    box.hidden = false;
+    var txt = document.getElementById("ai-text");
+    var meta = document.getElementById("ai-meta");
+    if (data.latest && data.latest.text) {
+      txt.textContent = "🤖 " + data.latest.text;
+      meta.textContent = "generated " + fmtClock(data.latest.generated_at)
+        + " · " + data.used_today + "/" + data.cap + " today";
+    } else {
+      txt.textContent = "🤖 No summary yet today.";
+      meta.textContent = data.used_today + "/" + data.cap + " today";
+    }
+    if (!generatingSummary) {
+      var btn = document.getElementById("ai-generate");
+      btn.disabled = !data.can_generate;
+      btn.textContent = data.can_generate ? "Summarize now" : "Cap reached";
+    }
+    // First-run privacy notice (once per device)
+    var seen = true;
+    try { seen = localStorage.getItem("bt_ai_notice_seen"); } catch (e) {}
+    if (!seen) notice.hidden = false;
+  }
+  function generateSummary() {
+    var btn = document.getElementById("ai-generate");
+    generatingSummary = true;
+    btn.disabled = true; btn.textContent = "Thinking…";
+    apiPost("api/summary", {})
+      .then(function () { generatingSummary = false; setStatus("Summary ready ✓"); return loadSummary(); })
+      .catch(function (err) {
+        generatingSummary = false;
+        setStatus(err.message.indexOf("429") >= 0
+          ? "Daily summary cap reached" : "Summary failed (" + err.message + ")", true);
+        return loadSummary();
+      });
+  }
+  function wireAiSummary() {
+    document.getElementById("ai-generate").addEventListener("click", generateSummary);
+    document.getElementById("ai-notice-dismiss").addEventListener("click", function () {
+      try { localStorage.setItem("bt_ai_notice_seen", "1"); } catch (e) {}
+      document.getElementById("ai-notice").hidden = true;
+    });
+    document.getElementById("ai-config-link").addEventListener("click", function (e) {
+      e.preventDefault();
+      if (!addonSlug) { setStatus("Open Settings → the add-on → Configuration"); return; }
+      // The Ingress iframe is same-origin with HA; navigate the parent frame to
+      // the add-on's Configuration tab.
+      var url = "/hassio/addon/" + addonSlug + "/config";
+      try { window.top.location.href = url; }
+      catch (err) { window.open(url, "_blank"); }
+    });
+  }
+
   // --- Data refresh (log + summary + journal) -----------------------------
   function refresh() {
     return apiGet("api/log")
@@ -377,6 +445,7 @@
         if (editingId === null) renderJournal(lastEntries);
         renderContractionReadout();
         renderHealthReadout();
+        loadSummary();
         if (currentTab === "supplies") loadSupplies();
         if (currentTab === "growth") loadGrowth();
         setStatus("");
@@ -964,6 +1033,7 @@
     buildSuppliesPanel();
     buildChecklistPanel();
     wireCommonNote();
+    wireAiSummary();
     wireTabs();
 
     document.getElementById("reset").addEventListener("click", resetAll);
@@ -972,6 +1042,7 @@
       .then(function (c) {
         if (c && typeof c.fever_threshold_c === "number") feverThresholdC = c.fever_threshold_c;
         if (c && c.measurement_system) imperial = (c.measurement_system === "imperial");
+        if (c && c.addon_slug) addonSlug = c.addon_slug;
         applyMeasurementDefaults();
         activateTab(pickInitialTab(c && c.default_tab));
       })

@@ -44,6 +44,7 @@ SUPPLY_REMINDER_TOPIC = "baby/supply/reminder"  # non-retained {"title","message
 # every actionable alert: {kind, title, message, ...}. Distinct from
 # baby/remote/alert (the device pump-due LED flag). Non-retained (fire-once).
 ALERT_TOPIC = "baby/alert"
+SUMMARY_TOPIC = "baby/summary"  # retained {"text","time","source"} AI daily summary
 HISTORY_CHUNK = 200  # events per replay message
 DISCOVERY_PREFIX = "homeassistant"
 
@@ -260,6 +261,17 @@ class MqttBridge:
         except aiomqtt.MqttError as e:
             log.warning("publish_assessment failed: %s", e)
 
+    async def publish_summary(self, text: str, time_str: str, source: str) -> None:
+        """Publish the latest AI daily summary on `baby/summary` (retained), read
+        by the sensor.baby_summary discovery entity."""
+        if self._client is None:
+            return
+        payload = {"text": (text or "")[:1000], "time": time_str or "", "source": source}
+        try:
+            await self._client.publish(SUMMARY_TOPIC, json.dumps(payload), qos=0, retain=True)
+        except aiomqtt.MqttError as e:
+            log.warning("publish_summary failed: %s", e)
+
     async def publish_alert(self, kind: str, title: str, message: str,
                             extra: dict | None = None) -> None:
         """Fire an actionable alert on the unified `baby/alert` bus.
@@ -358,6 +370,18 @@ class MqttBridge:
                     "state_topic": ASSESSMENT_TOPIC,
                     "value_template": "{{ value_json.time }}",
                     "icon": "mdi:clock-outline",
+                    **common,
+                }), qos=1, retain=True)
+        # AI daily summary text sensor (only when the feature is enabled)
+        if getattr(self.cfg, "summary_enabled", False):
+            await c.publish(
+                f"{DISCOVERY_PREFIX}/sensor/baby_tracker/summary/config",
+                json.dumps({
+                    "name": "Daily Summary",
+                    "unique_id": "baby_summary",
+                    "state_topic": SUMMARY_TOPIC,
+                    "value_template": "{{ value_json.text }}",
+                    "icon": "mdi:robot-happy-outline",
                     **common,
                 }), qos=1, retain=True)
         # buttons

@@ -39,6 +39,15 @@ automations. Stats are exposed back to Home Assistant as native entities.
 | `checklist_reset_hour` | int (0-23) | `0`               | Local hour to auto-uncheck the Get Ready checklist each morning. `0` = off (the default, since the seeded items are mostly one-time prep). |
 | `fever_threshold_c` | float        | `38.0`             | A logged temperature at/above this (in °C) is flagged as a fever in the Health tab. °F entries are converted before comparing. |
 | `measurement_system` | list        | `imperial`         | Default unit pickers in the UI: `imperial` (°F, lb/oz, in) or `metric` (°C, kg, cm). The unit is stored per entry, so this only changes the defaults. |
+| `summary_enabled` | bool          | `true`             | The AI daily summary in the summary card. On by default via the hosted proxy; turn off here to keep everything local/off. |
+| `summary_provider` | list         | `hosted`           | LLM backend: `hosted` proxy (default, `babytracker.shmaestro.com`), your own `ollama`, or `anthropic` / `openai` / `gemini`. |
+| `summary_hour` | int (0-23)       | `6`                | Local hour for the automatic daily digest. `0` = on-demand only. |
+| `summary_daily_cap` | int         | `2`                | Max summaries per day (auto + on-demand combined). |
+| `summary_hosted_url` | string      | `""`               | Base URL of the hosted summary proxy (when provider is `hosted`). |
+| `summary_ollama_url` | string      | `http://192.168.2.5:11434` | Your Ollama server (when provider is `ollama`). |
+| `summary_model` | string          | `gpt-oss:120b-cloud` | Model name for the chosen provider. |
+| `summary_api_key` | password      | `""`               | API key for `anthropic` / `openai` / `gemini`. |
+| `summary_prompt` | string         | (built-in)         | The recap instruction — pre-filled and editable. The de-identified digest is always appended by the add-on, so edits change tone, not what data is sent. |
 | `database_url`   | string (opt.)   | `""`               | Optional external database URL. Leave empty to use the built-in SQLite store under `/data`. |
 | `mqtt_host`      | string (opt.)   | `""`               | MQTT broker host. **Leave blank to auto-discover the Mosquitto add-on**; set it (e.g. `192.168.1.15`) to point at an **external broker** like EMQX on another host. |
 | `mqtt_port`      | port            | `1883`             | MQTT broker port. |
@@ -108,6 +117,7 @@ mosquitto_pub -t baby/remote/event \
 | `baby/assessment`      | yes      | `{"text","time"}` — the Contraction AI assessment (only when `ollama_enabled`). |
 | `baby/alert`           | no       | **Unified notifications bus** — `{"kind","title","message",…}` for every actionable alert. `kind` ∈ `fever`, `supply_low`, `supply_due`, `feed_reminder`, `pump_reminder`. Subscribe once and branch on `kind`. |
 | `baby/supply/reminder` | no       | `{"title","message","supply"}` — legacy alias of the supply alerts on `baby/alert` (kept for 2026.4.0 automations). |
+| `baby/summary`         | yes      | `{"text","time","source"}` — the latest AI daily summary (only when `summary_enabled`). |
 
 ### Auto-created Home Assistant entities
 

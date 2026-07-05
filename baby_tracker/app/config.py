@@ -14,6 +14,16 @@ from pathlib import Path
 
 OPTIONS_PATH = Path(os.environ.get("OPTIONS_PATH", "/data/options.json"))
 
+# Default AI daily-summary instruction (SDD-003). Pre-filled + editable; the code
+# always appends the de-identified digest, so edits change tone, not the data.
+DEFAULT_SUMMARY_PROMPT = (
+    "You are a warm, encouraging newborn-care assistant. From today's anonymized "
+    "activity, write a 2-3 sentence plain-language recap for a tired parent. "
+    "Gently note anything that stands out (a longer gap between feeds, fewer "
+    "diapers than yesterday, a fever) without alarming, diagnosing, or giving "
+    "medical advice. No names, and do not use em-dashes. Respond with only the recap."
+)
+
 
 def _load_options() -> dict:
     try:
@@ -43,6 +53,17 @@ class Config:
     # UI unit defaults: "imperial" (°F, lb/oz, in) or "metric" (°C, kg, cm).
     # Per-entry unit is still stored, so this only sets the default pickers.
     measurement_system: str = "imperial"
+    # AI daily summaries (SDD-003). Hosted proxy is live (babytracker.shmaestro.com),
+    # so it ships on-by-default; a first-run in-app notice points to the opt-out.
+    summary_enabled: bool = True
+    summary_provider: str = "hosted"   # hosted|ollama|anthropic|openai|gemini
+    summary_hour: int = 6              # local hour for the auto digest; 0 = on-demand only
+    summary_daily_cap: int = 2
+    summary_hosted_url: str = "https://babytracker.shmaestro.com"
+    summary_ollama_url: str = "http://192.168.2.5:11434"
+    summary_model: str = "gpt-oss:120b-cloud"
+    summary_api_key: str = ""          # for anthropic/openai/gemini
+    summary_prompt: str = DEFAULT_SUMMARY_PROMPT
     # storage
     data_dir: Path = Path(os.environ.get("DATA_DIR", "/data"))
     database_url: str | None = None  # optional external Postgres (unused in v1 SQLite path)
@@ -83,6 +104,24 @@ class Config:
                                              env.get("FEVER_THRESHOLD_C", 38.0))),
             measurement_system=(opts.get("measurement_system")
                                 or env.get("MEASUREMENT_SYSTEM") or "imperial"),
+            summary_enabled=_as_bool(env.get("SUMMARY_ENABLED")
+                                     or ("1" if opts.get("summary_enabled") else "0")),
+            summary_provider=(opts.get("summary_provider")
+                              or env.get("SUMMARY_PROVIDER") or "hosted"),
+            summary_hour=int(opts.get("summary_hour", env.get("SUMMARY_HOUR", 6))),
+            summary_daily_cap=int(opts.get("summary_daily_cap",
+                                           env.get("SUMMARY_DAILY_CAP", 2))),
+            summary_hosted_url=(opts.get("summary_hosted_url")
+                                or env.get("SUMMARY_HOSTED_URL") or ""),
+            summary_ollama_url=(opts.get("summary_ollama_url")
+                                or env.get("SUMMARY_OLLAMA_URL")
+                                or "http://192.168.2.5:11434"),
+            summary_model=(opts.get("summary_model") or env.get("SUMMARY_MODEL")
+                           or "gpt-oss:120b-cloud"),
+            summary_api_key=(opts.get("summary_api_key")
+                             or env.get("SUMMARY_API_KEY") or ""),
+            summary_prompt=(opts.get("summary_prompt") or env.get("SUMMARY_PROMPT")
+                            or DEFAULT_SUMMARY_PROMPT),
             data_dir=Path(env.get("DATA_DIR", "/data")),
             database_url=opts.get("database_url") or env.get("DATABASE_URL") or None,
             # Supervisor service (env vars exported by run.sh) is PRIMARY; the

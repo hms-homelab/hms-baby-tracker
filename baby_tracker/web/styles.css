@@ -504,3 +504,75 @@ html, body {
   border-top: 1px solid color-mix(in srgb, var(--glow) 22%, transparent);
 }
 .summary .sum-alert[hidden] { display: none; }
+
+/* ============ AI daily summary (in the summary card) ============ */
+.summary .sum-ai {
+  position: relative;
+  margin-top: 6px;
+  padding-top: 10px;
+  border-top: 1px solid color-mix(in srgb, var(--glow) 20%, transparent);
+}
+.ai-text {
+  font-size: 13.5px;
+  line-height: 1.5;
+  color: var(--ink);
+}
+.ai-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 8px;
+}
+.ai-meta {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--faint);
+  letter-spacing: 0.02em;
+}
+.ai-btn {
+  flex: 0 0 auto;
+  border: 1px solid color-mix(in srgb, var(--glow) 32%, transparent);
+  background: color-mix(in srgb, var(--glow) 12%, transparent);
+  color: var(--glow);
+  border-radius: 999px;
+  padding: 7px 14px;
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.ai-btn:disabled { opacity: 0.45; cursor: default; }
+.ai-btn:not(:disabled):active { transform: translateY(1px); }
+
+/* First-run AI privacy notice */
+.ai-notice {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  background: color-mix(in srgb, var(--glow) 10%, var(--surface));
+  border: 1px solid color-mix(in srgb, var(--glow) 30%, transparent);
+  border-radius: 14px;
+  padding: 12px 14px;
+  margin-bottom: 14px;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--muted);
+}
+.ai-notice strong { color: var(--ink); font-weight: 700; }
+.ai-notice button {
+  flex: 0 0 auto;
+  align-self: center;
+  border: none;
+  background: var(--glow);
+  color: #1A1018;
+  border-radius: 999px;
+  padding: 7px 14px;
+  font-family: var(--disp);
+  font-size: 12px;
+  font-weight: 800;
+  cursor: pointer;
+}
+.ai-notice[hidden] { display: none; }
+.ai-notice a { color: var(--glow); text-decoration: underline; cursor: pointer; font-weight: 700; }

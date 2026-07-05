@@ -32,6 +32,15 @@ options:
   checklist_reset_hour: 0
   fever_threshold_c: 38.0
   measurement_system: imperial
+  summary_enabled: true
+  summary_provider: hosted
+  summary_hour: 6
+  summary_daily_cap: 2
+  summary_hosted_url: "https://babytracker.shmaestro.com"
+  summary_ollama_url: "http://192.168.2.5:11434"
+  summary_model: "gpt-oss:120b-cloud"
+  summary_api_key: ""
+  summary_prompt: "You are a warm, encouraging newborn-care assistant. From today's anonymized activity, write a 2-3 sentence plain-language recap for a tired parent. Gently note anything that stands out (a longer gap between feeds, fewer diapers than yesterday, a fever) without alarming, diagnosing, or giving medical advice. No names, and do not use em-dashes. Respond with only the recap."
   mqtt_host: ""
   mqtt_port: 1883
   mqtt_username: ""
@@ -59,6 +68,20 @@ schema:
   fever_threshold_c: float
   # Default UI units: imperial (°F, lb/oz, in) or metric (°C, kg, cm).
   measurement_system: list(imperial|metric)
+  # AI daily summaries: a warm plain-language recap of the day, shown in the
+  # summary card. Sends only an ANONYMIZED digest (counts/trends, never names or
+  # notes). Provider: hosted proxy, your own Ollama, or a Claude/Gemini/OpenAI key.
+  summary_enabled: bool
+  summary_provider: list(hosted|ollama|anthropic|openai|gemini)
+  summary_hour: int(0,23)         # local hour for the auto digest; 0 = on-demand only
+  # Client-side per-day cap. Raise it if self-hosting Ollama; the hosted proxy
+  # enforces its own 2/day server-side regardless of this value.
+  summary_daily_cap: int(1,50)
+  summary_hosted_url: str?
+  summary_ollama_url: str?
+  summary_model: str?
+  summary_api_key: password?
+  summary_prompt: str?
   # MQTT broker — leave blank to auto-discover the Mosquitto add-on; set these
   # to point at an EXTERNAL broker (e.g. EMQX on another host).
   mqtt_host: str?

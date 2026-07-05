@@ -1,5 +1,24 @@
 # Changelog
 
+## 2026.4.3 - 2026-07-05
+
+- **feat: AI daily summaries (SDD-003).** A warm, plain-language recap of the
+  baby's day, shown in the summary card — an automatic digest each morning plus a
+  **Summarize now** button (2/day). It reads all event types and gently flags
+  anything that stands out (a longer feed gap, fewer diapers than yesterday, a
+  fever).
+  - **Privacy:** the model only ever receives an **anonymized digest** (counts,
+    sleep, trends, last temp/weight) — never a name, note, or any free text.
+  - **Providers:** a hosted proxy (default), your own **Ollama**, or a **Claude /
+    Gemini / OpenAI** key — set with `summary_provider` + `summary_api_key`.
+  - The instruction is an editable `summary_prompt` (pre-filled); the code always
+    appends the digest, so edits change tone, not what's sent.
+  - New `sensor.baby_summary` + retained `baby/summary` MQTT topic. A one-time
+    in-app notice discloses the hosted default and points to the opt-out.
+  - **On by default** via the hosted proxy (`babytracker.shmaestro.com`); the
+    prompt only ever carries the anonymized digest. Switch the provider or turn
+    it off in Configuration.
+
 ## 2026.4.2 - 2026-07-05
 
 - **fix: stale UI after an update.** The Ingress SPA is now served with

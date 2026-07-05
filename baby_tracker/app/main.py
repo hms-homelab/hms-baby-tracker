@@ -8,15 +8,18 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import datetime as dt
 import logging
+import uuid
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from . import assessment, ingest, notify, supplies
+from . import assessment, ingest, llm, notify, summary, supplies
 from .config import Config
 from .db import Database
 from .mqtt import MqttBridge
@@ -141,6 +144,52 @@ def create_app(cfg: Config | None = None) -> FastAPI:
     async def publish_state_now() -> None:
         await mqtt.publish_state(await state_stats())
 
+    _token = {"v": None}
+
+    def install_token() -> str:
+        """Stable random per-install id (for hosted-summary rate-limiting). Not
+        PII; minted once and cached in /data/install_token."""
+        if _token["v"]:
+            return _token["v"]
+        tok = None
+        p = cfg.data_dir / "install_token"
+        try:
+            cfg.data_dir.mkdir(parents=True, exist_ok=True)
+            tok = p.read_text().strip() if p.exists() else None
+        except OSError:
+            pass
+        if not tok:
+            tok = uuid.uuid4().hex
+            with contextlib.suppress(OSError):
+                p.write_text(tok)
+        _token["v"] = tok
+        return tok
+
+    _slug = {"v": None}
+
+    async def addon_slug() -> str:
+        """This add-on's Supervisor slug (for a deep link to its Configuration).
+        Empty when running standalone / without a Supervisor token."""
+        if _slug["v"] is not None:
+            return _slug["v"]
+        _slug["v"] = ""
+        if cfg.supervisor_token:
+            import httpx
+            with contextlib.suppress(Exception):
+                async with httpx.AsyncClient(timeout=8) as c:
+                    r = await c.get("http://supervisor/addons/self/info",
+                                    headers={"Authorization": f"Bearer {cfg.supervisor_token}"})
+                    if r.status_code < 400:
+                        _slug["v"] = (r.json().get("data") or {}).get("slug") or ""
+        return _slug["v"]
+
+    async def auto_summary() -> None:
+        with contextlib.suppress(summary.CapReached):
+            try:
+                await summary.generate(db, cfg, mqtt, install_token(), source="auto")
+            except Exception as e:  # never let a bad LLM call kill the scheduler
+                log.warning("auto summary failed: %s", e)
+
     async def ingest_and_broadcast(event_type, event_subtype=None, note=None,
                                    source="api", logged_at=None,
                                    value=None, value_unit=None):
@@ -197,6 +246,12 @@ def create_app(cfg: Config | None = None) -> FastAPI:
         cfg.data_dir.mkdir(parents=True, exist_ok=True)
         await db.init()
         reminders.start()
+        # Daily AI summary cron (SDD-003) — only when enabled and scheduled.
+        if cfg.summary_enabled and int(cfg.summary_hour) > 0:
+            reminders.sched.add_job(
+                auto_summary, "cron", hour=int(cfg.summary_hour), minute=0,
+                timezone=cfg.timezone, id="summary_auto", replace_existing=True,
+            )
         mqtt.on_event = ingest_and_broadcast
 
         async def on_connect():
@@ -293,7 +348,34 @@ def create_app(cfg: Config | None = None) -> FastAPI:
         tab = cfg.default_tab if cfg.default_tab in valid else "baby"
         system = cfg.measurement_system if cfg.measurement_system in ("imperial", "metric") else "imperial"
         return {"default_tab": tab, "fever_threshold_c": cfg.fever_threshold_c,
-                "measurement_system": system}
+                "measurement_system": system, "summary_enabled": cfg.summary_enabled,
+                "addon_slug": await addon_slug()}
+
+    # --- AI daily summary (SDD-003) ---------------------------------------
+    @app.get("/api/summary")
+    async def get_summary():
+        day = dt.datetime.now(dt.timezone.utc).astimezone(ZoneInfo(cfg.timezone)).strftime("%Y-%m-%d")
+        used = await db.count_summaries_today(day)
+        return {
+            "enabled": cfg.summary_enabled,
+            "latest": await db.latest_summary(),
+            "used_today": used,
+            "cap": cfg.summary_daily_cap,
+            "can_generate": cfg.summary_enabled and used < cfg.summary_daily_cap,
+        }
+
+    @app.post("/api/summary")
+    async def post_summary():
+        if not cfg.summary_enabled:
+            return JSONResponse({"ok": False, "error": "disabled"}, status_code=400)
+        try:
+            row = await summary.generate(db, cfg, mqtt, install_token(), source="manual")
+        except (summary.CapReached, llm.CapError):
+            return JSONResponse({"ok": False, "error": "cap"}, status_code=429)
+        except llm.ProviderError as e:
+            return JSONResponse({"ok": False, "error": "provider", "detail": str(e)[:200]},
+                                status_code=502)
+        return {"ok": True, "summary": row}
 
     # --- growth trends (weight / length / head circumference) --------------
     @app.get("/api/growth")
