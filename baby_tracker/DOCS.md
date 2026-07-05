@@ -37,6 +37,8 @@ automations. Stats are exposed back to Home Assistant as native entities.
 | `default_tab`    | list            | `baby`             | Which tab the web UI opens on (`get_ready`, `baby`, `contractions`, `health`, `growth`, `supplies`). Lead with `contractions`/`get_ready` pre-birth, then switch to `baby`. |
 | `supply_reminder_hour` | int (0-23) | `9`               | Local hour for the daily supplies sweep that reminds you about low-stock and refill-due items. |
 | `checklist_reset_hour` | int (0-23) | `0`               | Local hour to auto-uncheck the Get Ready checklist each morning. `0` = off (the default, since the seeded items are mostly one-time prep). |
+| `fever_threshold_c` | float        | `38.0`             | A logged temperature at/above this (in °C) is flagged as a fever in the Health tab. °F entries are converted before comparing. |
+| `measurement_system` | list        | `imperial`         | Default unit pickers in the UI: `imperial` (°F, lb/oz, in) or `metric` (°C, kg, cm). The unit is stored per entry, so this only changes the defaults. |
 | `database_url`   | string (opt.)   | `""`               | Optional external database URL. Leave empty to use the built-in SQLite store under `/data`. |
 | `mqtt_host`      | string (opt.)   | `""`               | MQTT broker host. **Leave blank to auto-discover the Mosquitto add-on**; set it (e.g. `192.168.1.15`) to point at an **external broker** like EMQX on another host. |
 | `mqtt_port`      | port            | `1883`             | MQTT broker port. |
@@ -104,7 +106,8 @@ mosquitto_pub -t baby/remote/event \
 | `baby/remote/reminder` | no       | `{"l1","l2","secs"}` transient OLED banner — pushed when a feed reminder fires. |
 | `baby/remote/history/replay` | no | `{"events":[…],"done":bool}` — chunked history backfill (see below).      |
 | `baby/assessment`      | yes      | `{"text","time"}` — the Contraction AI assessment (only when `ollama_enabled`). |
-| `baby/supply/reminder` | no       | `{"title","message","supply"}` — a supply low-stock / refill-due reminder for HA automations. |
+| `baby/alert`           | no       | **Unified notifications bus** — `{"kind","title","message",…}` for every actionable alert. `kind` ∈ `fever`, `supply_low`, `supply_due`, `feed_reminder`, `pump_reminder`. Subscribe once and branch on `kind`. |
+| `baby/supply/reminder` | no       | `{"title","message","supply"}` — legacy alias of the supply alerts on `baby/alert` (kept for 2026.4.0 automations). |
 
 ### Auto-created Home Assistant entities
 
@@ -112,7 +115,8 @@ On connect, the add-on publishes MQTT discovery so these appear under a single
 **Baby Tracker** device with no manual YAML:
 
 - Sensors: **Last Feed** (min), **Last Diaper** (min), **Feeds Today**,
-  **Diapers Today**, **Sleep Today**.
+  **Diapers Today**, **Sleep Today**, **Contractions Today**, **Get Ready**
+  (done/total), **Low Supplies** (count).
 - Sensors (only when `ollama_enabled`): **Contraction Assessment** and
   **Contraction Assessment Time**.
 - Binary sensor: **Sleeping** (occupancy).
@@ -178,19 +182,25 @@ login.
 
 ### Tabs
 
-A pinned **summary** sits on top and a pinned **journal** (logging every tab's
-events) sits at the bottom; between them is a tab bar:
+A pinned **summary** sits on top, a shared **note bar** (with a ⭐ special
+toggle) and a pinned **journal** (logging every tab's events) sit at the bottom;
+between them is a tab bar:
 
 - **Get Ready** — an editable prep checklist for mom, seeded with popular
   suggestions (crib, diaper bag, newborn clothes, bottles, wipes + cream, car
   seat). Tap to check off, add your own items, or **Uncheck all**. Optional daily
   auto-reset via `checklist_reset_hour`.
-- **Baby** — the everyday logging surface (feed / pump / diaper / other, notes,
-  and add/backfill).
+- **Baby** — the everyday logging surface (feed / pump / diaper / other, and
+  add/backfill).
 - **Contractions** — three big severity buttons (**Mild** / **Medium** /
   **Intense**), a note, and a contraction backfill, with a live "how many in the
   last 2h / last one / average gap" readout. Feeds the optional AI assessment.
-- **Health** / **Growth** — coming in a later release.
+- **Health** — log a temperature (°C or °F, flagged as a fever at/above
+  `fever_threshold_c`), free-text symptom notes, and medicine doses (with a
+  "last dose / N today" readout).
+- **Growth** — log weight (lb + oz or kg), length, and head circumference; each
+  shows the latest value, the change since the previous reading, and a small
+  trend sparkline. Units default from `measurement_system`.
 - **Supplies** — see below.
 
 Which tab opens first is the `default_tab` option — set it to `contractions` or

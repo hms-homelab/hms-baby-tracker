@@ -1,5 +1,49 @@
 # Changelog
 
+## 2026.4.1 - 2026-07-05
+
+The Health and Growth tabs go live (SDD-002, phase 2), completing the six-tab
+set.
+
+- **feat: Growth tab.** Log **weight**, **length**, and **head circumference**
+  over time; each metric shows the latest value, the **delta since the previous
+  reading**, and a tiny inline sparkline of the trend. Backed by new numeric
+  `value`/`value_unit` columns on `baby_events` and a `GET /api/growth` endpoint.
+
+- **feat: Health tab.** Log a **temperature** (°C or °F) — flagged as a **fever**
+  when it's at/above `fever_threshold_c` (default 38.0) — plus free-text
+  **symptom** notes and **medicine** doses (with a "last dose / N today"
+  readout). New `temperature` and `symptom` event types.
+
+- **feat: units + measurement system.** New `measurement_system` option
+  (`imperial` default, or `metric`) sets the default unit pickers: temperature
+  °F/°C, weight **lb + oz** or kg, length/head in or cm. Weight in `lb` uses a
+  dedicated lb + oz entry and shows deltas in ounces.
+
+- **feat: one shared note bar.** The per-tab note inputs are consolidated into a
+  single always-visible note bar (with the ⭐ special toggle) below the tabs, so
+  every tab — including Health — can jot a note.
+
+- **feat: summary dashboard.** The summary card now rolls up every tab —
+  contractions today (and in the last 2h), Get Ready progress (done/total), the
+  latest temperature and weight — plus a **notifications strip** that surfaces
+  active alerts (fever, low-stock and refill-due supplies) in one place instead
+  of only inside each tab.
+
+- **feat: unified `baby/alert` MQTT bus + new sensors.** All actionable alerts
+  (fever, supply low/refill-due, feed/pump reminders) now publish to one
+  `baby/alert` topic with a `kind` field, so an HA automation can subscribe once.
+  A live temperature at/above the fever threshold fires a server-side alert. New
+  discovery sensors: **Contractions Today**, **Get Ready** (done/total), **Low
+  Supplies**. `baby/supply/reminder` stays as a legacy alias.
+
+- **feat: numeric readings.** `POST /api/event` accepts `value` + `value_unit`;
+  they flow into the event's title/message, the journal, and the growth series.
+  Additive `value`/`value_unit` columns are migrated onto existing `baby_events`
+  archives (guarded `ALTER TABLE ADD COLUMN`, SQLite + Postgres).
+
+- **fix: diaper "Change" icon** is now 🩲 (was a placeholder 🔄).
+
 ## 2026.4.0 - 2026-07-05
 
 Tabbed redesign + Supplies + a Get Ready checklist (SDD-002, phase 1). The web

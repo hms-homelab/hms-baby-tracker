@@ -94,6 +94,7 @@ def compute(rows: list[dict], timezone: str = "America/New_York",
         "medicines_today": len(medicines_today),
         "tummy_times_today": len(tummy_today),
         "pumps_today": len(by("pump")),
+        "contractions_today": len(by("contraction")),
     }
 
     entries = [
@@ -104,6 +105,8 @@ def compute(rows: list[dict], timezone: str = "America/New_York",
             "note": r.get("note"),
             "logged_at": r["logged_at"],
             "time": r.get("time"),
+            "value": r.get("value"),
+            "value_unit": r.get("value_unit"),
         }
         for r in rows[:50]
     ]

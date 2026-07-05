@@ -5,52 +5,85 @@
 [![Home Assistant Add-on](https://img.shields.io/badge/Home%20Assistant-Add--on%20%2F%20App-blue.svg?logo=home-assistant)](https://www.home-assistant.io/)
 ![status](https://img.shields.io/badge/status-active-brightgreen)
 
-A self-contained Home Assistant app/add-on for newborn care tracking: feeds,
-diapers, sleep, pumping, baths, medicine, tummy time, weight and notes. You get a
-one-tap Ingress web UI, local storage, pump and feed reminders, and native Home
-Assistant entities. No n8n, no external database. It pairs with the ESP32 button
-remote from the [baby-tracker-suite](https://github.com/aamat09/baby-tracker-suite).
+A self-contained Home Assistant app/add-on for the whole newborn journey — from
+**labor contractions** through everyday **feeds, diapers, sleep and pumping** to
+**health, growth and supply tracking**. One-tap Ingress web UI, local storage,
+smart reminders, and native Home Assistant entities. No n8n, no external
+database. It pairs with the optional ESP32 button remote from the
+[baby-tracker-suite](https://github.com/aamat09/baby-tracker-suite).
 
 <p align="center">
-  <img src="images/dashboard.png" alt="Baby Tracker Ingress web UI with summary stats and one-tap event buttons" width="46%">
-  <img src="images/addon-info.png" alt="Baby Tracker running as a native Home Assistant add-on" width="46%">
+  <img src="images/dashboard.png" alt="Baby Tracker web UI: a summary dashboard rolling up every tab, a tab bar, and one-tap event buttons" width="42%">
+  <img src="images/addon-info.png" alt="Baby Tracker running as a native Home Assistant add-on" width="42%">
 </p>
-<p align="center"><em>One-tap Ingress web UI (left), running as a native Home Assistant add-on (right) with Ingress, MQTT discovery, start-on-boot and ~1% RAM.</em></p>
+<p align="center"><em>The summary rolls up every tab (feeds, sleep, contractions, get-ready, temperature, weight) with an alert strip; runs as a native HA add-on with Ingress, MQTT discovery and start-on-boot.</em></p>
 
-> **Want the physical button remote?** The 3D-printed ESP32 remote that drives this
-> dashboard has build details, photos and a demo on its
+## Six tabs, one journey
+
+A pinned **summary dashboard** sits on top and a pinned **journal** (logging
+every tab's events) at the bottom. Between them, six tabs — and which one opens
+first is configurable, so you can lead with **Contractions** or **Get Ready**
+before the birth and switch to **Baby** after.
+
+<p align="center">
+  <img src="images/tab-contractions.png" alt="Contractions tab: Mild/Medium/Intense buttons and a 2-hour readout" width="24%">
+  <img src="images/tab-growth.png" alt="Growth tab: weight, length and head circumference with trend sparklines" width="24%">
+  <img src="images/tab-supplies.png" alt="Supplies tab: inventory with low-stock and refill badges" width="24%">
+  <img src="images/tab-getready.png" alt="Get Ready tab: an editable prep checklist" width="24%">
+</p>
+
+- **🎒 Get Ready** — an editable prep checklist, seeded with popular suggestions
+  (crib, diaper bag, newborn clothes, bottles, wipes, car seat), with a progress
+  readout.
+- **👶 Baby** — one-tap logging of feeds (breast / bottle / solid), pumping,
+  diapers (pee / poop / both / change), sleep (start/stop toggle), bath, medicine
+  and tummy time, plus add/backfill for missed events.
+- **⏱️ Contractions** — big Mild / Medium / Intense buttons with a live
+  "how many in the last 2h · last one · average gap" readout, and an optional
+  on-device **AI labor-stage assessment** (via a local Ollama server).
+- **🌡️ Health** — log a temperature (°C or °F) that's **flagged as a fever**
+  past your threshold, plus symptom notes and medicine doses.
+- **📈 Growth** — track weight (lb + oz or kg), length and head circumference,
+  each with the change since the last reading and a trend sparkline.
+- **🧴 Supplies** — a consumables inventory (formula, diapers, wipes, creams)
+  that **auto-counts-down** as you log matching events and reminds you to refill
+  by low-stock threshold and/or a days cadence.
+
+## Features
+
+- **Summary dashboard** rolling up every tab, with a notifications strip that
+  surfaces active alerts (fever, low / refill-due supplies) in one place.
+- **Ingress web UI** served right inside Home Assistant — no extra port, no auth
+  to manage. A shared note bar (with a ⭐ special toggle) works on every tab.
+- **Native HA entities via MQTT discovery**: `sensor.baby_*` (last feed/diaper,
+  today's counts, contractions today, get-ready progress, low supplies), a
+  `binary_sensor` for "currently sleeping", and a `button.*` for each action.
+- **One unified alerts bus** — every actionable alert (fever, supply low /
+  refill-due, feed / pump reminders) fires on `baby/alert` with a `kind` field,
+  so a single HA automation can notify any phone you like. Every stored event
+  also fires on `baby/event`. See [`baby_tracker/DOCS.md`](baby_tracker/DOCS.md).
+- **Smart reminders**: per-side pump timers (default 2h), a feed timer reset by
+  each feed (default 3h), a daily supplies sweep, and an optional daily checklist
+  reset.
+- **Metric or imperial** — a `measurement_system` option sets the default unit
+  pickers (°F/lb/in or °C/kg/cm); the unit is stored per entry either way.
+- **Listens to the ESP32 remote** on `baby/remote/event` (and `baby/note`), and
+  drives its OLED (last feed/pump + next-pump reminder).
+- **Self-contained**: SQLite under `/data`, survives restarts, with an optional
+  external `database_url` (PostgreSQL).
+- **Quiet until you ask for it**: notifications only fire once you set
+  `notify_targets` or wire up your own `baby/alert` / `baby/event` automation.
+
+> **Want the physical button remote?** The 3D-printed ESP32 remote that drives
+> this dashboard has build details, photos and a demo on its
 > **[project page](https://shmaestro.com/projects/baby-tracker)**. Rather not print
 > and solder your own? A pre-built unit is **[available here](https://shop.shmaestro.com/products/baby-tracker)**.
 > Either way the add-on works fully standalone.
 
 <p align="center">
-  <img src="images/baby-remote.jpg" alt="The 3D-printed ESP32 Baby Remote: a translucent enclosure with 15 labeled buttons and a 0.96-inch OLED" width="320">
+  <img src="images/baby-remote.jpg" alt="The 3D-printed ESP32 Baby Remote: a translucent enclosure with labeled buttons and a 0.96-inch OLED" width="320">
 </p>
-<p align="center"><em>The companion ESP32 Baby Remote: one-tap logging over MQTT, with a 0.96" OLED showing last feed, last pump and the next-pump reminder. Optional, the add-on works on its own.</em></p>
-
-
-## Features
-
-- **One-tap logging** of 17 event types across 8 categories (feed, pump, diaper,
-  sleep, bath, medicine, tummy time, weight, plus regular and special notes).
-- **Ingress web UI**: the colorful button dashboard, summary stats and journal,
-  served right inside Home Assistant. No extra port to expose, no auth to manage.
-- **Native HA entities via MQTT discovery**: `sensor.baby_*`, a `binary_sensor`
-  for "currently sleeping", and a `button.*` for each action.
-- **Listens to the ESP32 remote** on `baby/remote/event` (and `baby/note`).
-- **Fires every logged event on `baby/event`** so you can build your own
-  automations. Trigger on the MQTT topic, then notify any phone you like. It
-  works for every source (web UI, companion app, or the remote), and the notify
-  target picker behaves like any normal automation. See
-  [`baby_tracker/DOCS.md`](baby_tracker/DOCS.md).
-- **Pump reminders**: per-side timer (default 2h) that sends a Home Assistant
-  notification.
-- **Feed reminders**: a single timer reset by each breast or bottle feed
-  (default 3h).
-- **Self-contained**: SQLite under `/data`, survives restarts, with an optional
-  external `database_url`.
-- **Quiet until you ask for it**: notifications only fire once you set
-  `notify_targets` or wire up your own `baby/event` automation.
+<p align="center"><em>The companion ESP32 Baby Remote: one-tap logging over MQTT, with a 0.96" OLED showing last feed, last pump and the next-pump reminder. Optional — the add-on works on its own.</em></p>
 
 ## Install
 
@@ -84,20 +117,22 @@ docker run -d -p 8099:8099 -v "$PWD/data:/data" \
 
 Config is via **env vars** instead of HA options: `TZ`, `PUMP_HOURS`,
 `FEED_HOURS`, `MQTT_HOST`, `MQTT_PORT`, `MQTT_USERNAME`, `MQTT_PASSWORD`,
-`DATABASE_URL`, `DATA_DIR`. Point the ESP32 remote's MQTT at the broker and
-presses log straight in. (HA `notify` targets only work when running as the
-add-on; `baby/event` still fires for your own MQTT automations.) Images are
-multi-arch (amd64 + arm64) and published on tagged releases.
+`DATABASE_URL`, `DATA_DIR`, `DEFAULT_TAB`, `MEASUREMENT_SYSTEM`,
+`FEVER_THRESHOLD_C`, `SUPPLY_REMINDER_HOUR`, `CHECKLIST_RESET_HOUR`. Point the
+ESP32 remote's MQTT at the broker and presses log straight in. (HA `notify`
+targets only work as the add-on; `baby/event` and `baby/alert` still fire for
+your own MQTT automations.) Images are multi-arch (amd64 + arm64).
 
 ## Architecture
 
 ```
 ESP32-C3 remote ─MQTT─┐
 HA UI (Ingress) ──────┤
-REST POST /api/event ─┼─▶ Baby Tracker (Docker, /data SQLite)
-                      │     ├─ FastAPI: ingest + stats engine + journal
-                      │     ├─ APScheduler: pump + feed reminders
-                      │     └─ MQTT: discovery + state + baby/event
+REST POST /api/event ─┼─▶ Baby Tracker (Docker, /data SQLite or Postgres)
+                      │     ├─ FastAPI: 6-tab UI, ingest, stats, journal,
+                      │     │           supplies inventory, checklist, growth
+                      │     ├─ APScheduler: pump/feed + supply + checklist jobs
+                      │     └─ MQTT: discovery + baby/state + baby/event + baby/alert
                       ▼
         HA entities + your automations + phone notifications
 ```
@@ -109,14 +144,19 @@ REST POST /api/event ─┼─▶ Baby Tracker (Docker, /data SQLite)
 | Option | Type | Default | Description |
 |---|---|---|---|
 | `timezone` | string | `America/New_York` | IANA TZ for "today" rollover and log timestamps |
+| `default_tab` | list | `baby` | Which tab opens first (`get_ready`, `baby`, `contractions`, `health`, `growth`, `supplies`) |
+| `measurement_system` | list | `imperial` | Default units: `imperial` (°F, lb/oz, in) or `metric` (°C, kg, cm) |
+| `fever_threshold_c` | float | `38.0` | Temperature (°C) at/above which the Health tab flags a fever |
 | `pump_hours` | float | `2` | Hours after a pump event before the reminder fires |
-| `feed_hours` | float | `3` | Hours after the last breast/bottle feed before the feed reminder fires |
+| `feed_hours` | float | `3` | Hours after the last feed before the feed reminder fires |
+| `supply_reminder_hour` | int | `9` | Local hour for the daily low-stock / refill-due sweep |
+| `checklist_reset_hour` | int | `0` | Local hour to auto-uncheck the Get Ready list (`0` = off) |
 | `notify_targets` | list | `[]` | HA `notify` service names (without `notify.`) for alerts |
-| `mqtt_host` | string | `""` | Fallback broker. Blank auto-discovers the Mosquitto/Supervisor broker; set it (e.g. `192.168.1.15`) for an external broker like EMQX |
+| `mqtt_host` | string | `""` | Fallback broker. Blank auto-discovers the Mosquitto/Supervisor broker |
 | `mqtt_port` | port | `1883` | External broker port (fallback only) |
-| `mqtt_username` | string | `""` | External broker username, if it requires auth |
-| `mqtt_password` | password | `""` | External broker password, if it requires auth |
-| `database_url` | string | `""` | Optional external DB; empty uses the built-in SQLite |
+| `mqtt_username` / `mqtt_password` | string | `""` | External broker credentials, if it requires auth |
+| `database_url` | string | `""` | Optional external PostgreSQL; empty uses the built-in SQLite |
+| `ollama_*` | — | off | Optional local-LLM contraction assessment (see DOCS) |
 
 ## Development
 
@@ -124,7 +164,7 @@ REST POST /api/event ─┼─▶ Baby Tracker (Docker, /data SQLite)
 cd baby_tracker
 python3 -m venv .venv && ./.venv/bin/pip install -r requirements.txt pytest
 DATA_DIR=/tmp/baby MQTT_ENABLED=0 ./.venv/bin/uvicorn app.main:app --port 8099
-./.venv/bin/python -m pytest -q     # stats parity tests
+./.venv/bin/python -m pytest -q     # stats parity + feature tests
 ```
 
 ## Related Projects

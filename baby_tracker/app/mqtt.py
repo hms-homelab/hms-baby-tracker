@@ -39,7 +39,11 @@ DISPLAY_TOPIC = "baby/remote/display"
 ALERT_TOPIC = "baby/remote/alert"
 REMINDER_TOPIC = "baby/remote/reminder"
 ASSESSMENT_TOPIC = "baby/assessment"  # retained {"text","time"} contraction AI assessment
-SUPPLY_REMINDER_TOPIC = "baby/supply/reminder"  # non-retained {"title","message","supply"}
+SUPPLY_REMINDER_TOPIC = "baby/supply/reminder"  # non-retained {"title","message","supply"} (legacy alias of baby/alert)
+# Unified app-level notifications bus. ONE topic HA automations subscribe to for
+# every actionable alert: {kind, title, message, ...}. Distinct from
+# baby/remote/alert (the device pump-due LED flag). Non-retained (fire-once).
+ALERT_TOPIC = "baby/alert"
 HISTORY_CHUNK = 200  # events per replay message
 DISCOVERY_PREFIX = "homeassistant"
 
@@ -57,6 +61,9 @@ SENSORS = [
     ("feeds_today", "Feeds Today", "{{ value_json.feeds_today }}", None),
     ("diapers_today", "Diapers Today", "{{ value_json.diapers_today }}", None),
     ("sleep_today", "Sleep Today", "{{ value_json.sleep_total_today }}", None),
+    ("contractions_today", "Contractions Today", "{{ value_json.contractions_today }}", None),
+    ("get_ready", "Get Ready", "{{ value_json.checklist_done }}/{{ value_json.checklist_total }}", None),
+    ("supplies_low", "Low Supplies", "{{ value_json.supplies_low }}", None),
 ]
 
 # (object_id, friendly name, event_type, event_subtype)
@@ -252,6 +259,24 @@ class MqttBridge:
                                        qos=0, retain=True)
         except aiomqtt.MqttError as e:
             log.warning("publish_assessment failed: %s", e)
+
+    async def publish_alert(self, kind: str, title: str, message: str,
+                            extra: dict | None = None) -> None:
+        """Fire an actionable alert on the unified `baby/alert` bus.
+
+        `kind` ∈ fever / supply_low / supply_due / feed_reminder / pump_reminder.
+        One topic for HA automations to trigger on and branch by `kind`.
+        Non-retained; best effort; no-op until the broker is connected.
+        """
+        if self._client is None:
+            return
+        payload = {"kind": kind, "title": title, "message": message}
+        if extra:
+            payload.update(extra)
+        try:
+            await self._client.publish(ALERT_TOPIC, json.dumps(payload), qos=0, retain=False)
+        except aiomqtt.MqttError as e:
+            log.warning("publish_alert failed: %s", e)
 
     async def publish_supply_reminder(self, title: str, message: str,
                                       supply: dict | None = None) -> None:

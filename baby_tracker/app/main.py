@@ -34,6 +34,8 @@ class EventIn(BaseModel):
     event_subtype: str | None = None
     note: str | None = None
     logged_at: str | None = None  # ISO8601; backfill a missed event. Omit for now().
+    value: float | None = None    # numeric reading (temperature/weight/length/…)
+    value_unit: str | None = None
 
 
 class EventPatch(BaseModel):
@@ -110,9 +112,26 @@ def create_app(cfg: Config | None = None) -> FastAPI:
     mqtt = MqttBridge(cfg, db)
     reminders = Reminders(cfg, mqtt=mqtt, db=db)
 
+    async def state_stats() -> dict:
+        """Event stats (baby/state) enriched with cross-tab roll-up counts so the
+        new HA discovery sensors (contractions, get-ready, low supplies) work."""
+        stats = compute(await db.recent(200), cfg.timezone)["stats"]
+        items = await db.list_checklist()
+        sups = supplies.annotate_list(await db.list_supplies())
+        stats["checklist_done"] = sum(1 for i in items if i["done"])
+        stats["checklist_total"] = len(items)
+        stats["supplies_low"] = sum(1 for s in sups if s["is_low"])
+        stats["supplies_due"] = sum(1 for s in sups if s["is_due"])
+        return stats
+
+    async def publish_state_now() -> None:
+        await mqtt.publish_state(await state_stats())
+
     async def ingest_and_broadcast(event_type, event_subtype=None, note=None,
-                                   source="api", logged_at=None):
-        row = await ingest.create_event(db, cfg, event_type, event_subtype, note, logged_at)
+                                   source="api", logged_at=None,
+                                   value=None, value_unit=None):
+        row = await ingest.create_event(db, cfg, event_type, event_subtype, note,
+                                        logged_at, value, value_unit)
         # Reminders are "X minutes from now" — only arm for live events, never for
         # a backfilled past event (logged_at set).
         if logged_at is None and event_type == "pump":
@@ -125,8 +144,7 @@ def create_app(cfg: Config | None = None) -> FastAPI:
         if logged_at is None and event_type != "supply":
             for s in await supplies.apply_consumption(db, event_type, row.get("event_subtype")):
                 await reminders.fire_supply_reminder(s, ["low"])
-        snapshot = compute(await db.recent(), cfg.timezone)
-        await mqtt.publish_state(snapshot["stats"])
+        await publish_state_now()
         # Refresh the device OLED rows + alert flag immediately (don't wait for
         # the 60s poll) when a feed/pump just changed the "ago" math.
         if event_type in ("feed", "pump"):
@@ -136,6 +154,14 @@ def create_app(cfg: Config | None = None) -> FastAPI:
         # or the remote), independent of the add-on's own `notify_targets`.
         await mqtt.publish_event({**row, "source": source})
         await notify.notify(cfg, row["title"], row["message"])
+        # Server-side fever alert: a LIVE temperature at/above the threshold fires
+        # on the unified baby/alert bus + notifies (mirrors the UI's fever badge).
+        if logged_at is None and event_type == "temperature" and value is not None:
+            c = (value - 32) * 5 / 9 if (value_unit and "F" in value_unit) else value
+            if c >= cfg.fever_threshold_c:
+                ft, fm = "🌡️ Fever", f"Temperature {ingest._fmt_value(value, value_unit)} — at/above the fever threshold."
+                await notify.notify(cfg, ft, fm)
+                await mqtt.publish_alert("fever", ft, fm, {"value": value, "unit": value_unit})
         # Contraction AI assessment (n8n "Contraction AI Assessment" webhook).
         # No-op unless ollama_enabled; runs after the event is stored so the
         # 2h window includes it. Fire-and-forget so a slow LLM never blocks the
@@ -149,8 +175,7 @@ def create_app(cfg: Config | None = None) -> FastAPI:
     async def rebroadcast():
         """Recompute + republish state and refresh the device OLED after an edit
         or delete. No `baby/event` fire / notify — those are for new events only."""
-        snapshot = compute(await db.recent(), cfg.timezone)
-        await mqtt.publish_state(snapshot["stats"])
+        await publish_state_now()
         await reminders.refresh_display()
 
     @contextlib.asynccontextmanager
@@ -163,13 +188,13 @@ def create_app(cfg: Config | None = None) -> FastAPI:
         async def on_connect():
             # Re-publish retained state + device display on every (re)connect so a
             # broker restart doesn't leave the OLED / HA sensors stale.
-            await mqtt.publish_state(compute(await db.recent(), cfg.timezone)["stats"])
+            await publish_state_now()
             await reminders.refresh_display()
 
         mqtt.on_connect = on_connect
         task = asyncio.create_task(mqtt.run())
         with contextlib.suppress(Exception):
-            await mqtt.publish_state(compute(await db.recent(), cfg.timezone)["stats"])
+            await publish_state_now()
             await reminders.refresh_display()
         try:
             yield
@@ -187,12 +212,25 @@ def create_app(cfg: Config | None = None) -> FastAPI:
 
     @app.get("/api/log")
     async def get_log():
-        return compute(await db.recent(200), cfg.timezone)
+        result = compute(await db.recent(200), cfg.timezone)
+        # Cross-table extras for the summary dashboard (checklist progress +
+        # supply alerts) — small tables, cheap to include on each poll.
+        items = await db.list_checklist()
+        sups = supplies.annotate_list(await db.list_supplies())
+        result["summary_extras"] = {
+            "checklist": {"done": sum(1 for i in items if i["done"]), "total": len(items)},
+            "supplies": {
+                "low": [s["name"] for s in sups if s["is_low"]],
+                "due": [s["name"] for s in sups if s["is_due"]],
+            },
+        }
+        return result
 
     @app.post("/api/event")
     async def post_event(ev: EventIn):
         row = await ingest_and_broadcast(
-            ev.event_type, ev.event_subtype, ev.note, "api", ev.logged_at
+            ev.event_type, ev.event_subtype, ev.note, "api", ev.logged_at,
+            ev.value, ev.value_unit,
         )
         return {"ok": True, "event": row}
 
@@ -231,7 +269,7 @@ def create_app(cfg: Config | None = None) -> FastAPI:
     @app.post("/api/reset")
     async def post_reset():
         await db.reset()
-        await mqtt.publish_state(compute([], cfg.timezone)["stats"])
+        await publish_state_now()
         return {"ok": True}
 
     # --- UI config (which tab to open on, etc.) ----------------------------
@@ -239,7 +277,15 @@ def create_app(cfg: Config | None = None) -> FastAPI:
     async def get_config():
         valid = {"get_ready", "baby", "contractions", "health", "growth", "supplies"}
         tab = cfg.default_tab if cfg.default_tab in valid else "baby"
-        return {"default_tab": tab}
+        system = cfg.measurement_system if cfg.measurement_system in ("imperial", "metric") else "imperial"
+        return {"default_tab": tab, "fever_threshold_c": cfg.fever_threshold_c,
+                "measurement_system": system}
+
+    # --- growth trends (weight / length / head circumference) --------------
+    @app.get("/api/growth")
+    async def get_growth():
+        metrics = ("weight", "length", "head_circumference")
+        return {m: await db.metric_series(m, 30) for m in metrics}
 
     # --- supplies ----------------------------------------------------------
     @app.get("/api/supplies")

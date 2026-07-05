@@ -1,6 +1,6 @@
 # SDD-002 — Tabbed UI: Get Ready / Baby / Contractions / Health / Growth / Supplies
 
-Status: **Phase 1 IMPLEMENTED** — 2026-07-05 (built + tested, pending release). Phase 2 → 2026.5.0 (see §7)
+Status: **Phase 1 SHIPPED (2026.4.0), Phase 2 IMPLEMENTED** — 2026-07-05 (Health + Growth + units + shared notes + summary dashboard + unified baby/alert bus; shipping as a patch **2026.4.1**, not 2026.5.0, to stay on the 4.0 line)
 Date: 2026-07-05
 Component: `baby_tracker/` (web SPA + `app/`)
 Ships as: **2026.4.0** then **2026.5.0** (minors — new features, backward-compatible)

@@ -107,5 +107,6 @@ def test_entries_shape():
     assert entries[-1]["id"] == 49
     for e in entries:
         assert set(e.keys()) == {
-            "id", "event_type", "event_subtype", "note", "logged_at", "time"
+            "id", "event_type", "event_subtype", "note", "logged_at", "time",
+            "value", "value_unit"
         }

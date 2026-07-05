@@ -87,6 +87,11 @@ class Reminders:
         with contextlib.suppress(Exception):
             await notify.notify(self.cfg, title, message)
         if self.mqtt is not None:
+            kind = "supply_low" if "low" in reasons else "supply_due"
+            tag = {"supply": {k: supply.get(k) for k in ("id", "category", "name")}}
+            with contextlib.suppress(Exception):
+                await self.mqtt.publish_alert(kind, title, message, tag)
+            # Legacy alias (baby/supply/reminder) kept for 2026.4.0 automations.
             with contextlib.suppress(Exception):
                 await self.mqtt.publish_supply_reminder(title, message, supply)
 
@@ -138,6 +143,9 @@ class Reminders:
             f"— {self._hrs(self.cfg.pump_hours)} hours ago."
         )
         await notify.notify(self.cfg, title, message)
+        if self.mqtt is not None:
+            with contextlib.suppress(Exception):
+                await self.mqtt.publish_alert("pump_reminder", title, message, {"side": side})
 
     async def _fire_feed(self, subtype: str, feed_time: str) -> None:
         title = "🍼 Feed Reminder"
@@ -151,3 +159,5 @@ class Reminders:
         if self.mqtt is not None:
             await self.mqtt.publish_reminder(
                 "Feed reminder", f"last {subtype or 'feed'} {feed_time}", secs=4)
+            with contextlib.suppress(Exception):
+                await self.mqtt.publish_alert("feed_reminder", title, message)

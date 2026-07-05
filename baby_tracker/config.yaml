@@ -30,6 +30,8 @@ options:
   default_tab: baby
   supply_reminder_hour: 9
   checklist_reset_hour: 0
+  fever_threshold_c: 38.0
+  measurement_system: imperial
   mqtt_host: ""
   mqtt_port: 1883
   mqtt_username: ""
@@ -53,6 +55,10 @@ schema:
   supply_reminder_hour: int(0,23)
   # Local hour to auto-uncheck the Get Ready checklist each morning. 0 = off.
   checklist_reset_hour: int(0,23)
+  # A logged temperature at/above this (°C) is flagged as a fever in the UI.
+  fever_threshold_c: float
+  # Default UI units: imperial (°F, lb/oz, in) or metric (°C, kg, cm).
+  measurement_system: list(imperial|metric)
   # MQTT broker — leave blank to auto-discover the Mosquitto add-on; set these
   # to point at an EXTERNAL broker (e.g. EMQX on another host).
   mqtt_host: str?

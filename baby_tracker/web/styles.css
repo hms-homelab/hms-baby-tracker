@@ -434,3 +434,73 @@ html, body {
   padding: 2px 6px;
 }
 .check-del:active { color: #e89b8b; }
+
+/* ============ Health ============ */
+.hx-readout {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--muted);
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 10px 12px;
+  margin-bottom: 12px;
+}
+.hx-readout.fever {
+  color: #e88b8b;
+  background: rgba(224, 107, 107, 0.1);
+  border-color: rgba(224, 107, 107, 0.34);
+  font-weight: 700;
+}
+
+/* ============ Growth ============ */
+.metric-row {
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 12px 13px;
+  margin-bottom: 10px;
+  background: var(--surface-2);
+}
+.metric-row:last-child { margin-bottom: 0; }
+.metric-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.metric-name { font-size: 14px; font-weight: 700; color: var(--ink); }
+.metric-val { font-family: var(--mono); font-size: 14px; color: var(--glow); white-space: nowrap; }
+.metric-hint { font-size: 11px; color: var(--faint); margin-top: 6px; }
+.spark {
+  display: block;
+  width: 100%;
+  height: 42px;
+  margin-top: 10px;
+  color: var(--glow);
+  overflow: visible;
+}
+
+/* ============ Shared note bar ============ */
+.star-toggle {
+  flex: 0 0 auto;
+  width: 46px;
+  border: 1px solid var(--line-2);
+  background: #0F0E14;
+  color: var(--faint);
+  border-radius: 11px;
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.star-toggle.on {
+  color: #E8C66B;
+  border-color: color-mix(in srgb, #E8C66B 45%, transparent);
+  background: rgba(232, 198, 107, 0.1);
+}
+.star-toggle:active { transform: translateY(1px); }
+
+/* Summary alert strip (fever / low supply / refill due) */
+.summary .sum-alert {
+  color: var(--glow);
+  font-weight: 700;
+  margin-top: 4px;
+  padding-top: 8px;
+  border-top: 1px solid color-mix(in srgb, var(--glow) 22%, transparent);
+}
+.summary .sum-alert[hidden] { display: none; }

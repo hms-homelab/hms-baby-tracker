@@ -33,7 +33,7 @@
       ["Pee", "#f0e68c", { event_type: "diaper", event_subtype: "pee" }, "💧"],
       ["Poop", "#d2a679", { event_type: "diaper", event_subtype: "poop" }, "💩"],
       ["Both", "#e8c8a0", { event_type: "diaper", event_subtype: "both" }, "✅"],
-      ["Change", "#c8b89a", { event_type: "diaper", event_subtype: "change" }, "🔄"],
+      ["Change", "#c8b89a", { event_type: "diaper", event_subtype: "change" }, "🩲"],
     ],
     "grp-other": [
       ["Sleep Start", "#b0a0e8", { event_type: "sleep", event_subtype: "start" }, "😴", true],
@@ -52,6 +52,13 @@
   ];
 
   var SUPPLY_CATEGORIES = ["formula", "diapers", "wipes", "cream", "other"];
+
+  // Growth tab metrics. [event_type, label, [metric_unit, imperial_unit]]
+  var GROWTH_METRICS = [
+    ["weight", "⚖️ Weight", ["kg", "lb"]],
+    ["length", "📏 Length", ["cm", "in"]],
+    ["head_circumference", "🧢 Head", ["cm", "in"]],
+  ];
 
   // Which event a supply auto-counts down on. [label, type, subtype?]
   var CONSUME_OPTIONS = [
@@ -76,7 +83,10 @@
   var editingId = null;   // id of the journal row whose inline editor is open
   var currentTab = "baby";
   var lastEntries = [];   // cache of the latest journal entries (for the ctx readout)
-  var PANELS = { get_ready: 1, baby: 1, contractions: 1, supplies: 1 };
+  var feverThresholdC = 38.0;  // from /api/config
+  var imperial = true;          // from /api/config measurement_system
+  var noteSpecial = false;      // shared note bar ⭐ toggle state
+  var PANELS = { get_ready: 1, baby: 1, contractions: 1, health: 1, growth: 1, supplies: 1 };
 
   // --- Networking ---------------------------------------------------------
   function setStatus(msg, isErr) {
@@ -124,7 +134,10 @@
   function fmtAgo(min) { return (min === null || min === undefined) ? "—" : min + "min ago"; }
   function fmtType(t) { return t ? " (" + t + ")" : ""; }
 
-  function renderSummary(stats) {
+  function renderSummary(data) {
+    var stats = (data && data.stats) || {};
+    var extras = (data && data.summary_extras) || {};
+    var entries = (data && data.entries) || lastEntries || [];
     document.getElementById("sum-feed").textContent =
       "🍼 Last feed: " + fmtAgo(stats.last_feed_min) + fmtType(stats.last_feed_type) +
       " | Today: " + stats.feeds_today;
@@ -137,12 +150,62 @@
     document.getElementById("sum-other").textContent =
       "🫙 Pumps: " + stats.pumps_today + " | 🛁 Baths: " + stats.baths_today +
       " | 💊 Medicine: " + stats.medicines_today + " | 🤸 Tummy time: " + stats.tummy_times_today;
+
+    // Contractions / Get Ready / Health / Growth roll-up
+    var now = Date.now(), win = 2 * 3600 * 1000;
+    var ctxToday = 0, ctx2h = 0, lastTemp = null, lastWeight = null;
+    entries.forEach(function (e) {
+      if (e.event_type === "contraction") {
+        if (sameLocalDay(e.logged_at)) ctxToday++;
+        if (now - new Date(e.logged_at).getTime() <= win) ctx2h++;
+      }
+      if (!lastTemp && e.event_type === "temperature" && e.value != null) lastTemp = e;
+      if (!lastWeight && e.event_type === "weight" && e.value != null) lastWeight = e;
+    });
+    var cl = extras.checklist || { done: 0, total: 0 };
+    document.getElementById("sum-track").textContent =
+      "⏱️ Contractions: " + ctxToday + (ctx2h ? " (" + ctx2h + " in 2h)" : "")
+      + " | 🎒 Ready: " + cl.done + "/" + cl.total;
+
+    var fever = false, tempStr = "—";
+    if (lastTemp) {
+      tempStr = fmtNum(lastTemp.value) + (lastTemp.value_unit ? " " + lastTemp.value_unit : "");
+      fever = isFever(lastTemp.value, lastTemp.value_unit || "");
+    }
+    var wStr = lastWeight ? fmtMeasure(lastWeight.value, lastWeight.value_unit) : "—";
+    document.getElementById("sum-vitals").textContent =
+      "🌡️ Temp: " + tempStr + (fever ? " ⚠" : "") + " | 📈 Weight: " + wStr;
+
+    // Notifications / alerts strip (fever + supply low/refill-due)
+    var sup = extras.supplies || { low: [], due: [] };
+    var alerts = [];
+    if (fever) alerts.push("⚠ Fever");
+    if (sup.low && sup.low.length) alerts.push("🧴 Low: " + sup.low.join(", "));
+    if (sup.due && sup.due.length) alerts.push("🔔 Refill: " + sup.due.join(", "));
+    var aEl = document.getElementById("sum-alert");
+    if (alerts.length) { aEl.textContent = alerts.join("   ·   "); aEl.hidden = false; }
+    else { aEl.textContent = ""; aEl.hidden = true; }
   }
 
+  function fmtValue(v, u) {
+    if (v === null || v === undefined) return "";
+    return " " + String(v) + (u ? " " + u : "");
+  }
+  // Weight stored as decimal lb -> "X lb Y oz"; everything else -> "value unit".
+  function fmtWeightLb(v) {
+    if (v === null || v === undefined) return "";
+    var lb = Math.floor(v), oz = Math.round((v - lb) * 16);
+    if (oz === 16) { lb += 1; oz = 0; }
+    return lb + " lb " + oz + " oz";
+  }
+  function fmtMeasure(v, u) {
+    if (v === null || v === undefined) return "";
+    return (u === "lb") ? fmtWeightLb(v) : (String(v) + (u ? " " + u : ""));
+  }
   function journalLabel(e) {
     var type = e.event_type, sub = e.event_subtype;
     if (type === "diaper") {
-      if (sub === "change") return "🔄 Diaper change";
+      if (sub === "change") return "🩲 Diaper change";
       if (sub === "both") return "🧷 Pee+Poop";
       if (sub === "pee") return "💧 Pee";
       if (sub === "poop") return "💩 Poop";
@@ -166,6 +229,11 @@
     }
     if (type === "contraction") return "⏱️ Contraction" + fmtType(sub);
     if (type === "supply") return "🧴 Supply" + fmtType(sub);
+    if (type === "temperature") return "🌡️ Temperature" + fmtValue(e.value, e.value_unit);
+    if (type === "weight") return "⚖️ Weight " + fmtMeasure(e.value, e.value_unit);
+    if (type === "length") return "📏 Length" + fmtValue(e.value, e.value_unit);
+    if (type === "head_circumference") return "🧢 Head" + fmtValue(e.value, e.value_unit);
+    if (type === "symptom") return "🤒 Symptom";
     if (type === "note") return "📝 Note";
     var icon = ICONS[type] || "📝";
     var display = type.replace(/_/g, " ");
@@ -305,10 +373,12 @@
     return apiGet("api/log")
       .then(function (data) {
         lastEntries = data.entries || [];
-        renderSummary(data.stats || {});
+        renderSummary(data);
         if (editingId === null) renderJournal(lastEntries);
         renderContractionReadout();
+        renderHealthReadout();
         if (currentTab === "supplies") loadSupplies();
+        if (currentTab === "growth") loadGrowth();
         setStatus("");
       })
       .catch(function (err) { setStatus("Offline — retrying… (" + err.message + ")", true); });
@@ -323,13 +393,6 @@
     apiPost("api/event", payload)
       .then(function () { setStatus("Logged ✓"); return refresh(); })
       .catch(function (err) { setStatus("Failed to log (" + err.message + ")", true); });
-  }
-  function saveNote(inputEl, special) {
-    var msg = (inputEl.value || "").trim();
-    if (!msg) return;
-    apiPost("api/note", { message: msg, special: !!special })
-      .then(function () { inputEl.value = ""; setStatus("Note saved ✓"); return refresh(); })
-      .catch(function (err) { setStatus("Failed to save note (" + err.message + ")", true); });
   }
   function addManual() {
     var sel = document.getElementById("manual-type");
@@ -531,6 +594,201 @@
       .then(function () { inp.value = ""; return loadChecklist(); }).catch(function () {});
   }
 
+  // --- Health -------------------------------------------------------------
+  function sameLocalDay(iso) {
+    var d = new Date(iso), n = new Date();
+    return d.getFullYear() === n.getFullYear() && d.getMonth() === n.getMonth()
+      && d.getDate() === n.getDate();
+  }
+  function isFever(v, unit) {
+    if (v === null || v === undefined) return false;
+    var thr = (unit && unit.indexOf("F") >= 0) ? (feverThresholdC * 9 / 5 + 32) : feverThresholdC;
+    return v >= thr;
+  }
+  function renderHealthReadout() {
+    var tEl = document.getElementById("temp-readout");
+    if (tEl) {
+      var temp = null;
+      for (var i = 0; i < lastEntries.length; i++) {
+        if (lastEntries[i].event_type === "temperature" && lastEntries[i].value != null) {
+          temp = lastEntries[i]; break;
+        }
+      }
+      if (!temp) { tEl.textContent = "No temperature logged yet."; tEl.className = "hx-readout"; }
+      else {
+        var fever = isFever(temp.value, temp.value_unit || "");
+        tEl.textContent = "Last: " + fmtNum(temp.value) + (temp.value_unit ? " " + temp.value_unit : "")
+          + " · " + (temp.time || "") + (fever ? "   ⚠ Fever" : "");
+        tEl.className = "hx-readout" + (fever ? " fever" : "");
+      }
+    }
+    var mEl = document.getElementById("med-readout");
+    if (mEl) {
+      var meds = lastEntries.filter(function (e) { return e.event_type === "medicine"; });
+      var today = meds.filter(function (e) { return sameLocalDay(e.logged_at); });
+      if (!meds.length) mEl.textContent = "No medicine logged today.";
+      else mEl.textContent = "Last dose: " + (meds[0].time || "")
+        + (meds[0].note ? " (" + meds[0].note + ")" : "") + " · " + today.length + " today";
+    }
+  }
+  function logTemperature() {
+    var v = parseFloat(document.getElementById("temp-value").value);
+    if (isNaN(v)) { setStatus("Enter a temperature", true); return; }
+    var u = document.getElementById("temp-unit").value;
+    apiPost("api/event", { event_type: "temperature", value: v, value_unit: u })
+      .then(function () { document.getElementById("temp-value").value = ""; setStatus("Temp logged ✓"); return refresh(); })
+      .catch(function (err) { setStatus("Failed (" + err.message + ")", true); });
+  }
+  function logSymptom() {
+    var inp = document.getElementById("symptom-input");
+    var msg = (inp.value || "").trim();
+    if (!msg) return;
+    apiPost("api/event", { event_type: "symptom", note: msg })
+      .then(function () { inp.value = ""; setStatus("Symptom logged ✓"); return refresh(); })
+      .catch(function (err) { setStatus("Failed (" + err.message + ")", true); });
+  }
+  function logMedicine() {
+    var inp = document.getElementById("med-input");
+    var msg = (inp.value || "").trim();
+    var body = { event_type: "medicine" };
+    if (msg) body.note = msg;
+    apiPost("api/event", body)
+      .then(function () { inp.value = ""; setStatus("Medicine logged ✓"); return refresh(); })
+      .catch(function (err) { setStatus("Failed (" + err.message + ")", true); });
+  }
+
+  // --- Growth -------------------------------------------------------------
+  function loadGrowth() {
+    return apiGet("api/growth").then(renderGrowth).catch(function () {});
+  }
+  function round2(n) { return Math.round(n * 100) / 100; }
+  function renderGrowth(data) {
+    var wrap = document.getElementById("growth-metrics");
+    if (!wrap) return;
+    wrap.textContent = "";
+    GROWTH_METRICS.forEach(function (m) {
+      var series = (data && data[m[0]]) || [];
+      var card = document.createElement("div");
+      card.className = "metric-row";
+      var head = document.createElement("div");
+      head.className = "metric-head";
+      var name = document.createElement("span");
+      name.className = "metric-name"; name.textContent = m[1];
+      head.appendChild(name);
+      var val = document.createElement("span");
+      val.className = "metric-val";
+      if (series.length) {
+        var last = series[series.length - 1];
+        var txt = fmtMeasure(last.value, last.value_unit);
+        if (series.length >= 2) {
+          var raw = last.value - series[series.length - 2].value;
+          var arrow = raw > 0 ? "▲" : (raw < 0 ? "▼" : "·");
+          var dtxt;
+          if (last.value_unit === "lb") {
+            var oz = Math.round(raw * 16);
+            dtxt = (oz > 0 ? "+" : "") + oz + " oz";
+          } else {
+            var d = round2(raw);
+            dtxt = (d > 0 ? "+" : "") + d + (last.value_unit ? " " + last.value_unit : "");
+          }
+          txt += "   " + arrow + " " + dtxt;
+        }
+        val.textContent = txt;
+      } else { val.textContent = "—"; }
+      head.appendChild(val);
+      card.appendChild(head);
+      if (series.length >= 2) {
+        card.appendChild(sparkline(series.map(function (r) { return r.value; })));
+      } else {
+        var hint = document.createElement("div");
+        hint.className = "metric-hint";
+        hint.textContent = series.length ? "Log another to see the trend" : "No entries yet";
+        card.appendChild(hint);
+      }
+      wrap.appendChild(card);
+    });
+  }
+  function sparkline(vals) {
+    var NS = "http://www.w3.org/2000/svg";
+    var w = 240, h = 42, p = 5;
+    var min = Math.min.apply(null, vals), max = Math.max.apply(null, vals);
+    var range = (max - min) || 1, n = vals.length;
+    var pts = vals.map(function (v, i) {
+      var x = p + (w - 2 * p) * (n === 1 ? 0.5 : i / (n - 1));
+      var y = h - p - (h - 2 * p) * ((v - min) / range);
+      return x.toFixed(1) + "," + y.toFixed(1);
+    });
+    var svg = document.createElementNS(NS, "svg");
+    svg.setAttribute("class", "spark");
+    svg.setAttribute("viewBox", "0 0 " + w + " " + h);
+    svg.setAttribute("preserveAspectRatio", "none");
+    var poly = document.createElementNS(NS, "polyline");
+    poly.setAttribute("points", pts.join(" "));
+    poly.setAttribute("fill", "none");
+    poly.setAttribute("stroke", "currentColor");
+    poly.setAttribute("stroke-width", "2");
+    poly.setAttribute("stroke-linejoin", "round");
+    poly.setAttribute("stroke-linecap", "round");
+    svg.appendChild(poly);
+    var lp = pts[pts.length - 1].split(",");
+    var dot = document.createElementNS(NS, "circle");
+    dot.setAttribute("cx", lp[0]); dot.setAttribute("cy", lp[1]); dot.setAttribute("r", "3");
+    dot.setAttribute("fill", "currentColor");
+    svg.appendChild(dot);
+    return svg;
+  }
+  function metricDef(type) {
+    for (var i = 0; i < GROWTH_METRICS.length; i++) {
+      if (GROWTH_METRICS[i][0] === type) return GROWTH_METRICS[i];
+    }
+    return null;
+  }
+  function growthType() { return document.getElementById("growth-type").value; }
+  function growthUnit() { return document.getElementById("growth-unit").value; }
+  // Repopulate the unit picker for the selected metric, defaulting per system,
+  // and reveal the extra oz field only for imperial weight.
+  function syncGrowthUnits() {
+    var def = metricDef(growthType());
+    if (!def) return;
+    var usel = document.getElementById("growth-unit");
+    var prev = usel.value;
+    usel.textContent = "";
+    def[2].forEach(function (u) {
+      var o = document.createElement("option"); o.value = u; o.textContent = u; usel.appendChild(o);
+    });
+    usel.value = (def[2].indexOf(prev) >= 0) ? prev : (imperial ? def[2][1] : def[2][0]);
+    toggleOz();
+  }
+  function toggleOz() {
+    var isLb = growthType() === "weight" && growthUnit() === "lb";
+    document.getElementById("growth-oz").hidden = !isLb;
+    document.getElementById("growth-value").placeholder = isLb ? "lb" : "Value";
+  }
+  function logGrowth() {
+    var type = growthType(), unit = growthUnit();
+    var vEl = document.getElementById("growth-value");
+    var v = parseFloat(vEl.value);
+    if (type === "weight" && unit === "lb") {
+      var oz = parseFloat(document.getElementById("growth-oz").value) || 0;
+      var lb = isNaN(v) ? 0 : v;
+      if (lb === 0 && oz === 0) { setStatus("Enter lb / oz", true); return; }
+      v = lb + oz / 16;
+    } else if (isNaN(v)) { setStatus("Enter a value", true); return; }
+    var timeVal = document.getElementById("growth-time").value;
+    var iso = timeVal ? localInputToIso(timeVal) : null;
+    var body = { event_type: type, value: v, value_unit: unit };
+    if (iso) body.logged_at = iso;
+    apiPost("api/event", body)
+      .then(function () {
+        vEl.value = "";
+        document.getElementById("growth-oz").value = "";
+        document.getElementById("growth-time").value = nowLocalInput();
+        setStatus("Logged ✓");
+        return refresh().then(loadGrowth);
+      })
+      .catch(function (err) { setStatus("Failed (" + err.message + ")", true); });
+  }
+
   // --- Tabs ---------------------------------------------------------------
   function activateTab(name) {
     if (!PANELS[name]) name = "baby";
@@ -546,6 +804,8 @@
     try { localStorage.setItem("bt_tab", name); } catch (e) {}
     if (name === "supplies") loadSupplies();
     if (name === "get_ready") loadChecklist();
+    if (name === "growth") loadGrowth();
+    if (name === "health") renderHealthReadout();
   }
 
   function wireTabs() {
@@ -614,14 +874,6 @@
     });
     document.getElementById("ctx-backfill-time").value = nowLocalInput();
     document.getElementById("ctx-backfill-add").addEventListener("click", addBackfillContraction);
-    document.getElementById("ctx-note-save").addEventListener("click", function () {
-      var inp = document.getElementById("ctx-note");
-      var msg = (inp.value || "").trim();
-      if (!msg) return;
-      apiPost("api/note", { message: msg })
-        .then(function () { inp.value = ""; setStatus("Note saved ✓"); return refresh(); })
-        .catch(function (err) { setStatus("Failed (" + err.message + ")", true); });
-    });
   }
   function buildSuppliesPanel() {
     var cat = document.getElementById("sup-category");
@@ -638,6 +890,61 @@
     });
     document.getElementById("sup-add").addEventListener("click", addSupply);
   }
+  function buildHealthPanel() {
+    document.getElementById("temp-log").addEventListener("click", logTemperature);
+    document.getElementById("temp-value").addEventListener("keydown", function (e) {
+      if (e.key === "Enter") logTemperature();
+    });
+    document.getElementById("symptom-log").addEventListener("click", logSymptom);
+    document.getElementById("symptom-input").addEventListener("keydown", function (e) {
+      if (e.key === "Enter") logSymptom();
+    });
+    document.getElementById("med-log").addEventListener("click", logMedicine);
+  }
+  function buildGrowthPanel() {
+    var sel = document.getElementById("growth-type");
+    GROWTH_METRICS.forEach(function (m) {
+      var o = document.createElement("option"); o.value = m[0]; o.textContent = m[1];
+      sel.appendChild(o);
+    });
+    sel.addEventListener("change", syncGrowthUnits);
+    document.getElementById("growth-unit").addEventListener("change", toggleOz);
+    syncGrowthUnits();
+    document.getElementById("growth-time").value = nowLocalInput();
+    document.getElementById("growth-log").addEventListener("click", logGrowth);
+  }
+  // Apply the configured unit system to the pickers (after /api/config loads).
+  function applyMeasurementDefaults() {
+    var t = document.getElementById("temp-unit");
+    if (t) t.value = imperial ? "°F" : "°C";
+    syncGrowthUnits();
+  }
+  // Shared note bar (works on any tab), with the ⭐ special toggle.
+  function wireCommonNote() {
+    var star = document.getElementById("note-star");
+    var inp = document.getElementById("common-note");
+    star.addEventListener("click", function () {
+      noteSpecial = !noteSpecial;
+      star.textContent = noteSpecial ? "⭐" : "☆";
+      star.classList.toggle("on", noteSpecial);
+    });
+    document.getElementById("common-note-save").addEventListener("click", function () { saveCommonNote(inp); });
+    inp.addEventListener("keydown", function (e) { if (e.key === "Enter") saveCommonNote(inp); });
+  }
+  function saveCommonNote(inp) {
+    var msg = (inp.value || "").trim();
+    if (!msg) return;
+    apiPost("api/note", { message: msg, special: noteSpecial })
+      .then(function () {
+        inp.value = "";
+        noteSpecial = false;
+        var star = document.getElementById("note-star");
+        star.textContent = "☆"; star.classList.remove("on");
+        setStatus("Note saved ✓");
+        return refresh();
+      })
+      .catch(function (err) { setStatus("Failed to save note (" + err.message + ")", true); });
+  }
   function buildChecklistPanel() {
     document.getElementById("checklist-add").addEventListener("click", addChecklistItem);
     document.getElementById("checklist-input").addEventListener("keydown", function (e) {
@@ -652,27 +959,23 @@
     buildGrids();
     buildManual();
     buildContractionsPanel();
+    buildHealthPanel();
+    buildGrowthPanel();
     buildSuppliesPanel();
     buildChecklistPanel();
+    wireCommonNote();
     wireTabs();
 
-    document.getElementById("note-save").addEventListener("click", function () {
-      saveNote(document.getElementById("note-input"), false);
-    });
-    document.getElementById("special-save").addEventListener("click", function () {
-      saveNote(document.getElementById("special-input"), true);
-    });
-    document.getElementById("note-input").addEventListener("keydown", function (e) {
-      if (e.key === "Enter") saveNote(e.target, false);
-    });
-    document.getElementById("special-input").addEventListener("keydown", function (e) {
-      if (e.key === "Enter") saveNote(e.target, true);
-    });
     document.getElementById("reset").addEventListener("click", resetAll);
 
     apiGet("api/config")
-      .then(function (c) { activateTab(pickInitialTab(c && c.default_tab)); })
-      .catch(function () { activateTab(pickInitialTab("baby")); });
+      .then(function (c) {
+        if (c && typeof c.fever_threshold_c === "number") feverThresholdC = c.fever_threshold_c;
+        if (c && c.measurement_system) imperial = (c.measurement_system === "imperial");
+        applyMeasurementDefaults();
+        activateTab(pickInitialTab(c && c.default_tab));
+      })
+      .catch(function () { applyMeasurementDefaults(); activateTab(pickInitialTab("baby")); });
 
     refresh();
     pollTimer = setInterval(refresh, 10000);

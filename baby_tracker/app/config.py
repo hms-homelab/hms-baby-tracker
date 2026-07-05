@@ -37,6 +37,12 @@ class Config:
     # Get Ready checklist: local hour to auto-uncheck the list. 0 = off (the
     # seeded items are mostly one-time prep, so daily reset is opt-in).
     checklist_reset_hour: int = 0
+    # Health tab: a logged temperature at/above this (in °C) is flagged as a
+    # fever in the UI (°F entries are converted before comparing).
+    fever_threshold_c: float = 38.0
+    # UI unit defaults: "imperial" (°F, lb/oz, in) or "metric" (°C, kg, cm).
+    # Per-entry unit is still stored, so this only sets the default pickers.
+    measurement_system: str = "imperial"
     # storage
     data_dir: Path = Path(os.environ.get("DATA_DIR", "/data"))
     database_url: str | None = None  # optional external Postgres (unused in v1 SQLite path)
@@ -73,6 +79,10 @@ class Config:
                                               env.get("SUPPLY_REMINDER_HOUR", 9))),
             checklist_reset_hour=int(opts.get("checklist_reset_hour",
                                               env.get("CHECKLIST_RESET_HOUR", 0))),
+            fever_threshold_c=float(opts.get("fever_threshold_c",
+                                             env.get("FEVER_THRESHOLD_C", 38.0))),
+            measurement_system=(opts.get("measurement_system")
+                                or env.get("MEASUREMENT_SYSTEM") or "imperial"),
             data_dir=Path(env.get("DATA_DIR", "/data")),
             database_url=opts.get("database_url") or env.get("DATABASE_URL") or None,
             # Supervisor service (env vars exported by run.sh) is PRIMARY; the

@@ -86,7 +86,9 @@ CREATE TABLE IF NOT EXISTS baby_events (
     event_type    TEXT NOT NULL,
     event_subtype TEXT,
     note          TEXT,
-    logged_at     TEXT NOT NULL
+    logged_at     TEXT NOT NULL,
+    value         REAL,
+    value_unit    TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_baby_events_logged_at ON baby_events (logged_at DESC);
 CREATE INDEX IF NOT EXISTS idx_baby_events_type ON baby_events (event_type);
@@ -131,6 +133,14 @@ class SqliteDatabase:
 
         async with aiosqlite.connect(self.path) as db:
             await db.executescript(SQLITE_SCHEMA)
+            # Migration: add numeric value columns to a pre-existing baby_events
+            # (SQLite has no ADD COLUMN IF NOT EXISTS — check PRAGMA first).
+            cur = await db.execute("PRAGMA table_info(baby_events)")
+            cols = {r[1] for r in await cur.fetchall()}
+            if "value" not in cols:
+                await db.execute("ALTER TABLE baby_events ADD COLUMN value REAL")
+            if "value_unit" not in cols:
+                await db.execute("ALTER TABLE baby_events ADD COLUMN value_unit TEXT")
             # Seed the Get Ready checklist on a fresh install (only when empty).
             cur = await db.execute("SELECT COUNT(*) FROM baby_checklist")
             (count,) = await cur.fetchone()
@@ -149,15 +159,18 @@ class SqliteDatabase:
         event_subtype: str | None = None,
         note: str | None = None,
         logged_at: str | None = None,
+        value: float | None = None,
+        value_unit: str | None = None,
     ) -> int:
         import aiosqlite
 
         logged_at = logged_at or dt.datetime.now(dt.timezone.utc).isoformat()
         async with aiosqlite.connect(self.path) as db:
             cur = await db.execute(
-                "INSERT INTO baby_events (event_type, event_subtype, note, logged_at) "
-                "VALUES (?, ?, ?, ?)",
-                (event_type, event_subtype or None, note or None, logged_at),
+                "INSERT INTO baby_events (event_type, event_subtype, note, logged_at, "
+                "value, value_unit) VALUES (?, ?, ?, ?, ?, ?)",
+                (event_type, event_subtype or None, note or None, logged_at,
+                 value, value_unit or None),
             )
             await db.commit()
             return cur.lastrowid
@@ -169,7 +182,7 @@ class SqliteDatabase:
         async with aiosqlite.connect(self.path) as db:
             db.row_factory = aiosqlite.Row
             cur = await db.execute(
-                "SELECT id, event_type, event_subtype, note, logged_at "
+                "SELECT id, event_type, event_subtype, note, logged_at, value, value_unit "
                 "FROM baby_events ORDER BY logged_at DESC LIMIT ?",
                 (limit,),
             )
@@ -187,12 +200,31 @@ class SqliteDatabase:
         async with aiosqlite.connect(self.path) as db:
             db.row_factory = aiosqlite.Row
             cur = await db.execute(
-                "SELECT id, event_type, event_subtype, note, logged_at "
+                "SELECT id, event_type, event_subtype, note, logged_at, value, value_unit "
                 "FROM baby_events WHERE event_type = ? ORDER BY logged_at DESC LIMIT 1",
                 (event_type,),
             )
             r = await cur.fetchone()
         return dict(r) if r else None
+
+    async def metric_series(self, event_type: str, limit: int = 30) -> list[dict]:
+        """Last `limit` numeric readings of a type, OLDEST->newest (for trends)."""
+        import aiosqlite
+
+        async with aiosqlite.connect(self.path) as db:
+            db.row_factory = aiosqlite.Row
+            cur = await db.execute(
+                "SELECT id, value, value_unit, logged_at FROM baby_events "
+                "WHERE event_type = ? AND value IS NOT NULL "
+                "ORDER BY logged_at DESC LIMIT ?",
+                (event_type, limit),
+            )
+            rows = await cur.fetchall()
+        out = [dict(r) for r in rows]
+        for d in out:
+            d["time"] = _fmt_time(d["logged_at"], self.tz)
+        out.reverse()
+        return out
 
     async def get_event(self, event_id: int) -> dict | None:
         import aiosqlite
@@ -200,7 +232,7 @@ class SqliteDatabase:
         async with aiosqlite.connect(self.path) as db:
             db.row_factory = aiosqlite.Row
             cur = await db.execute(
-                "SELECT id, event_type, event_subtype, note, logged_at "
+                "SELECT id, event_type, event_subtype, note, logged_at, value, value_unit "
                 "FROM baby_events WHERE id = ?",
                 (event_id,),
             )
@@ -245,7 +277,7 @@ class SqliteDatabase:
         async with aiosqlite.connect(self.path) as db:
             db.row_factory = aiosqlite.Row
             cur = await db.execute(
-                "SELECT id, event_type, event_subtype, note, logged_at "
+                "SELECT id, event_type, event_subtype, note, logged_at, value, value_unit "
                 "FROM baby_events ORDER BY logged_at ASC"
             )
             rows = await cur.fetchall()
@@ -450,10 +482,15 @@ CREATE TABLE IF NOT EXISTS baby_events (
     event_type    text NOT NULL,
     event_subtype text,
     note          text,
-    logged_at     timestamptz NOT NULL DEFAULT now()
+    logged_at     timestamptz NOT NULL DEFAULT now(),
+    value         real,
+    value_unit    text
 );
 CREATE INDEX IF NOT EXISTS idx_baby_events_logged_at ON baby_events (logged_at DESC);
 CREATE INDEX IF NOT EXISTS idx_baby_events_type ON baby_events (event_type);
+-- Migration for a pre-existing baby_events archive (additive, safe).
+ALTER TABLE baby_events ADD COLUMN IF NOT EXISTS value real;
+ALTER TABLE baby_events ADD COLUMN IF NOT EXISTS value_unit text;
 
 CREATE TABLE IF NOT EXISTS baby_supplies (
     id                    bigserial PRIMARY KEY,
@@ -530,14 +567,17 @@ class PostgresDatabase:
         event_subtype: str | None = None,
         note: str | None = None,
         logged_at: str | None = None,
+        value: float | None = None,
+        value_unit: str | None = None,
     ) -> int:
         when = _parse(logged_at) if logged_at else dt.datetime.now(dt.timezone.utc)
         pool = await self._get_pool()
         async with pool.acquire() as con:
             row = await con.fetchrow(
-                "INSERT INTO baby_events (event_type, event_subtype, note, logged_at) "
-                "VALUES ($1, $2, $3, $4) RETURNING id",
+                "INSERT INTO baby_events (event_type, event_subtype, note, logged_at, "
+                "value, value_unit) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id",
                 event_type, event_subtype or None, note or None, when,
+                value, value_unit or None,
             )
         return int(row["id"])
 
@@ -555,7 +595,7 @@ class PostgresDatabase:
         pool = await self._get_pool()
         async with pool.acquire() as con:
             rows = await con.fetch(
-                "SELECT id, event_type, event_subtype, note, logged_at "
+                "SELECT id, event_type, event_subtype, note, logged_at, value, value_unit "
                 "FROM baby_events ORDER BY logged_at DESC LIMIT $1",
                 limit,
             )
@@ -570,17 +610,35 @@ class PostgresDatabase:
         pool = await self._get_pool()
         async with pool.acquire() as con:
             r = await con.fetchrow(
-                "SELECT id, event_type, event_subtype, note, logged_at "
+                "SELECT id, event_type, event_subtype, note, logged_at, value, value_unit "
                 "FROM baby_events WHERE event_type = $1 ORDER BY logged_at DESC LIMIT 1",
                 event_type,
             )
         return self._row_to_dict(r) if r else None
 
+    async def metric_series(self, event_type: str, limit: int = 30) -> list[dict]:
+        """Last `limit` numeric readings of a type, OLDEST->newest (for trends)."""
+        pool = await self._get_pool()
+        async with pool.acquire() as con:
+            rows = await con.fetch(
+                "SELECT id, value, value_unit, logged_at FROM baby_events "
+                "WHERE event_type = $1 AND value IS NOT NULL "
+                "ORDER BY logged_at DESC LIMIT $2",
+                event_type, limit,
+            )
+        out = []
+        for r in rows:
+            d = self._row_to_dict(r)
+            d["time"] = _fmt_time(d["logged_at"], self.tz)
+            out.append(d)
+        out.reverse()
+        return out
+
     async def get_event(self, event_id: int) -> dict | None:
         pool = await self._get_pool()
         async with pool.acquire() as con:
             r = await con.fetchrow(
-                "SELECT id, event_type, event_subtype, note, logged_at "
+                "SELECT id, event_type, event_subtype, note, logged_at, value, value_unit "
                 "FROM baby_events WHERE id = $1",
                 int(event_id),
             )
