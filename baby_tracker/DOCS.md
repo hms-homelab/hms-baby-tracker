@@ -39,7 +39,7 @@ automations. Stats are exposed back to Home Assistant as native entities.
 | `checklist_reset_hour` | int (0-23) | `0`               | Local hour to auto-uncheck the Get Ready checklist each morning. `0` = off (the default, since the seeded items are mostly one-time prep). |
 | `fever_threshold_c` | float        | `38.0`             | A logged temperature at/above this (in °C) is flagged as a fever in the Health tab. °F entries are converted before comparing. |
 | `measurement_system` | list        | `imperial`         | Default unit pickers in the UI: `imperial` (°F, lb/oz, in) or `metric` (°C, kg, cm). The unit is stored per entry, so this only changes the defaults. |
-| `summary_enabled` | bool          | `true`             | The AI daily summary in the summary card. On by default via the hosted proxy; turn off here to keep everything local/off. |
+| `summary_enabled` | bool          | `false`            | The AI daily summary in the summary card. **Off by default (opt-in)** — turn it on to get a warm plain-language recap. When enabled it sends only a de-identified digest (counts/trends, never names or notes) to the chosen provider (hosted proxy by default). |
 | `summary_provider` | list         | `hosted`           | LLM backend: `hosted` proxy (default, `babytracker.shmaestro.com`), your own `ollama`, or `anthropic` / `openai` / `gemini`. |
 | `summary_hour` | int (0-23)       | `6`                | Local hour for the automatic daily digest. `0` = on-demand only. |
 | `summary_daily_cap` | int         | `2`                | Max summaries per day (auto + on-demand combined). |
@@ -256,6 +256,14 @@ recompute the stats and refresh the device OLED, but — unlike a brand-new even
 Events are stored in SQLite at `/data/baby.db` by default, which persists across
 add-on restarts and updates. The **Reset** action in the UI (`POST api/reset`)
 clears all logged events — use with care.
+
+### Back up & restore
+
+Use **Back up data** in the footer to download a single JSON file containing all
+your events, supplies and checklist items (`GET api/export`). Keep it somewhere
+safe; **Restore** (`POST api/import`) reloads it later and **replaces** the
+current data. This is a per-add-on backup independent of Home Assistant's
+system-wide snapshots, so you never lose your log to a bad update.
 
 ### External Postgres (optional, advanced)
 

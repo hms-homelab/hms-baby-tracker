@@ -531,6 +531,45 @@
       .catch(function (err) { setStatus("Failed to reset (" + err.message + ")", true); });
   }
 
+  // --- Backup / restore (issue #5) ---------------------------------------
+  function backupData() {
+    setStatus("Preparing backup…");
+    apiGet("api/export").then(function (data) {
+      var blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+      var url = URL.createObjectURL(blob);
+      var a = document.createElement("a");
+      var d = new Date();
+      function p(n) { return (n < 10 ? "0" : "") + n; }
+      a.href = url;
+      a.download = "baby-tracker-backup-" + d.getFullYear() + p(d.getMonth() + 1) +
+        p(d.getDate()) + "-" + p(d.getHours()) + p(d.getMinutes()) + ".json";
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      setStatus("Backup downloaded ✓");
+    }).catch(function (err) { setStatus("Backup failed (" + err.message + ")", true); });
+  }
+  function restoreData(file) {
+    if (!file) return;
+    if (!window.confirm("Restore from this file? It REPLACES all current data in the add-on.")) return;
+    var reader = new FileReader();
+    reader.onload = function () {
+      var payload;
+      try { payload = JSON.parse(reader.result); }
+      catch (e) { setStatus("That is not a valid JSON backup", true); return; }
+      apiPost("api/import", payload)
+        .then(function (r) {
+          var n = r.restored ? (r.restored.baby_events || 0) : 0;
+          setStatus("Restored ✓ (" + n + " events)");
+          return refresh();
+        })
+        .then(function () { loadSupplies(); loadChecklist(); })
+        .catch(function (err) { setStatus("Restore failed (" + err.message + ")", true); });
+    };
+    reader.readAsText(file);
+  }
+
   // --- Contractions -------------------------------------------------------
   function addBackfillContraction() {
     var sel = document.getElementById("ctx-backfill-intensity");
@@ -1078,6 +1117,14 @@
     wireTabs();
 
     document.getElementById("reset").addEventListener("click", resetAll);
+    document.getElementById("backup").addEventListener("click", backupData);
+    document.getElementById("restore-btn").addEventListener("click", function () {
+      document.getElementById("restore-file").click();
+    });
+    document.getElementById("restore-file").addEventListener("change", function (e) {
+      restoreData(e.target.files && e.target.files[0]);
+      e.target.value = ""; // allow re-selecting the same file
+    });
 
     apiGet("api/config")
       .then(function (c) {

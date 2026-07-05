@@ -14,14 +14,14 @@ import uuid
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
-from fastapi import FastAPI
+from fastapi import Body, FastAPI
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from . import assessment, ingest, llm, notify, summary, supplies
 from .config import Config
-from .db import Database
+from .db import Database, EXPORT_TABLES
 from .mqtt import MqttBridge
 from .scheduler import Reminders
 from .stats import compute
@@ -340,6 +340,27 @@ def create_app(cfg: Config | None = None) -> FastAPI:
         await db.reset()
         await publish_state_now()
         return {"ok": True}
+
+    # --- backup / restore (issue #5) --------------------------------------
+    @app.get("/api/export")
+    async def get_export():
+        data = await db.export_all()
+        stamp = dt.datetime.now(dt.timezone.utc).strftime("%Y%m%d-%H%M%S")
+        return JSONResponse(
+            data,
+            headers={"Content-Disposition":
+                     f'attachment; filename="baby-tracker-backup-{stamp}.json"'},
+        )
+
+    @app.post("/api/import")
+    async def post_import(payload: dict = Body(...)):
+        tables = payload.get("tables")
+        if not isinstance(tables, dict) or not (set(tables) & set(EXPORT_TABLES)):
+            return JSONResponse({"ok": False, "error": "not a Baby Tracker backup file"},
+                                status_code=400)
+        counts = await db.import_all(tables, replace=True)
+        await publish_state_now()
+        return {"ok": True, "restored": counts}
 
     # --- UI config (which tab to open on, etc.) ----------------------------
     @app.get("/api/config")

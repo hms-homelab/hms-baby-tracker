@@ -1,5 +1,19 @@
 # Changelog
 
+## 2026.4.6 - unreleased
+
+- **change: AI summaries are now OFF by default (opt-in)**
+  ([#4](https://github.com/hms-homelab/hms-baby-tracker/issues/4)). Nothing ever
+  leaves the add-on until you explicitly enable `summary_enabled`. A 3rd-party
+  call, even a de-identified one, should never be on without consent. Existing
+  installs keep whatever they had set; new installs start off.
+- **feat: back up and restore your data**
+  ([#5](https://github.com/hms-homelab/hms-baby-tracker/issues/5)). New **Back up
+  data** / **Restore** buttons in the web UI export every event, supply and
+  checklist item to a single JSON file and reload it later — a per-add-on backup
+  that does not depend on Home Assistant's system-wide snapshots. Also exposed as
+  `GET /api/export` and `POST /api/import`.
+
 ## 2026.4.5 - 2026-07-05
 
 - **feat: AI summary now sees a 3-day rolling view.** The anonymized digest sent

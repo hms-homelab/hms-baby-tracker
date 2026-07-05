@@ -42,6 +42,26 @@ SUPPLY_FIELDS = (
     "low_notified", "created_at", "updated_at",
 )
 
+# Backup/restore (issue #5): the per-table column set dumped and reloaded by
+# export_all / import_all. `id` is intentionally excluded so a restore reassigns
+# fresh primary keys (no sequence surgery, no clashes with existing rows).
+EXPORT_TABLES = {
+    "baby_events": ("event_type", "event_subtype", "note", "logged_at", "value", "value_unit"),
+    "baby_supplies": SUPPLY_FIELDS,
+    "baby_checklist": ("label", "position", "done", "done_at", "updated_at"),
+    "baby_summaries": ("text", "provider", "source", "generated_at", "day"),
+}
+
+# Timestamp columns that Postgres stores as timestamptz (need datetime on insert).
+_PG_TS_COLS = {"logged_at"}
+
+
+def _json_safe(v):
+    """Coerce a DB value to something JSON-serializable (datetimes -> isoformat)."""
+    if isinstance(v, dt.datetime):
+        return v.isoformat()
+    return v
+
 
 def _now_iso() -> str:
     return dt.datetime.now(dt.timezone.utc).isoformat()
@@ -503,6 +523,41 @@ class SqliteDatabase:
             (n,) = await cur.fetchone()
         return int(n)
 
+    # -- Backup / restore (issue #5) -----------------------------------------
+    async def export_all(self) -> dict:
+        import aiosqlite
+
+        tables = {}
+        async with aiosqlite.connect(self.path) as db:
+            db.row_factory = aiosqlite.Row
+            for table, cols in EXPORT_TABLES.items():
+                collist = ", ".join(cols)
+                cur = await db.execute(f"SELECT {collist} FROM {table} ORDER BY id")
+                tables[table] = [{c: _json_safe(r[c]) for c in cols}
+                                 for r in await cur.fetchall()]
+        return {"app": "hms-baby-tracker", "schema": 1,
+                "exported_at": _now_iso(), "tables": tables}
+
+    async def import_all(self, tables: dict, replace: bool = True) -> dict:
+        import aiosqlite
+
+        counts = {}
+        async with aiosqlite.connect(self.path) as db:
+            for table, cols in EXPORT_TABLES.items():
+                rows = tables.get(table) or []
+                if replace:
+                    await db.execute(f"DELETE FROM {table}")
+                collist = ", ".join(cols)
+                placeholders = ", ".join("?" * len(cols))
+                for r in rows:
+                    await db.execute(
+                        f"INSERT INTO {table} ({collist}) VALUES ({placeholders})",
+                        [r.get(c) for c in cols],
+                    )
+                counts[table] = len(rows)
+            await db.commit()
+        return counts
+
 
 def _num_or_none(v):
     if v is None or v == "":
@@ -924,3 +979,34 @@ class PostgresDatabase:
         pool = await self._get_pool()
         async with pool.acquire() as con:
             await con.execute("DELETE FROM baby_events")
+
+    # -- Backup / restore (issue #5) -----------------------------------------
+    async def export_all(self) -> dict:
+        pool = await self._get_pool()
+        tables = {}
+        async with pool.acquire() as con:
+            for table, cols in EXPORT_TABLES.items():
+                collist = ", ".join(cols)
+                rows = await con.fetch(f"SELECT {collist} FROM {table} ORDER BY id")
+                tables[table] = [{c: _json_safe(r[c]) for c in cols} for r in rows]
+        return {"app": "hms-baby-tracker", "schema": 1,
+                "exported_at": _now_iso(), "tables": tables}
+
+    async def import_all(self, tables: dict, replace: bool = True) -> dict:
+        pool = await self._get_pool()
+        counts = {}
+        async with pool.acquire() as con:
+            async with con.transaction():
+                for table, cols in EXPORT_TABLES.items():
+                    rows = tables.get(table) or []
+                    if replace:
+                        await con.execute(f"DELETE FROM {table}")
+                    collist = ", ".join(cols)
+                    placeholders = ", ".join(f"${i + 1}" for i in range(len(cols)))
+                    for r in rows:
+                        vals = [_parse(r[c]) if (c in _PG_TS_COLS and r.get(c))
+                                else r.get(c) for c in cols]
+                        await con.execute(
+                            f"INSERT INTO {table} ({collist}) VALUES ({placeholders})", *vals)
+                    counts[table] = len(rows)
+        return counts
