@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026.4.5 - 2026-07-05
+
+- **feat: AI summary now sees a 3-day rolling view.** The anonymized digest sent
+  to the model includes feeds / diapers / sleep for each of the last three days
+  (not just today), so the recap can spot trends across days. Still tiny (~170
+  tokens) and still de-identified: counts and totals only, never notes or names.
+
 ## 2026.4.4 - 2026-07-05
 
 - **fix: edit-time picker showed the wrong time**

@@ -35,6 +35,22 @@ def test_digest_excludes_notes_and_names(tmp_path):
     asyncio.run(run())
 
 
+def test_digest_has_3day_trend(tmp_path):
+    db = _db(tmp_path)
+
+    async def run():
+        await db.init()
+        now = dt.datetime.now(dt.timezone.utc)
+        await db.insert_event("feed", "bottle", None, (now - dt.timedelta(days=2)).isoformat())
+        await db.insert_event("feed", "breast", None, now.isoformat())
+        d = await summary.build_digest(db, Config())
+        assert len(d["days_3"]) == 3
+        prompt = summary.build_prompt(Config(), d)
+        assert "Last 3 days" in prompt
+
+    asyncio.run(run())
+
+
 def test_generate_stores_and_caps(tmp_path, monkeypatch):
     db = _db(tmp_path)
 

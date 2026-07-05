@@ -35,6 +35,34 @@ def _fmt(n) -> str:
     return str(int(n)) if float(n) == int(n) else str(round(float(n), 2))
 
 
+def _sleep_minutes(rows, start, end, now):
+    """Minutes of sleep overlapping the [start, end) window (clips cross-midnight
+    stretches so each day gets its own share). An open 'start' (currently
+    sleeping) counts up to now."""
+    evs = sorted((r for r in rows if r["event_type"] == "sleep"),
+                 key=lambda r: _parse(r["logged_at"]))
+    total = 0.0
+    pending = None
+    for r in evs:
+        t = _parse(r["logged_at"])
+        if r.get("event_subtype") == "start":
+            pending = t
+        elif r.get("event_subtype") == "end" and pending is not None:
+            a, b = max(pending, start), min(t, end)
+            if b > a:
+                total += (b - a).total_seconds() / 60
+            pending = None
+    if pending is not None:
+        a, b = max(pending, start), min(now, end)
+        if b > a:
+            total += (b - a).total_seconds() / 60
+    return round(total)
+
+
+def _hm(mins) -> str:
+    return f"{int(mins) // 60}h{int(mins) % 60}m"
+
+
 def _day(cfg, now: dt.datetime) -> str:
     return now.astimezone(ZoneInfo(cfg.timezone)).strftime("%Y-%m-%d")
 
@@ -64,11 +92,23 @@ async def build_digest(db, cfg, now: dt.datetime | None = None) -> dict:
                    and start <= local(r) < end
                    and (sub is None or r.get("event_subtype") == sub))
 
-    # feed subtype breakdown + yesterday comparison
+    # feed subtype breakdown (today)
     feed_breakdown = {s: count("feed", today_start, now_local + dt.timedelta(minutes=1), s)
                       for s in ("breast", "bottle", "solid")}
-    feeds_yesterday = count("feed", y_start, today_start)
-    diapers_yesterday = count("diaper", y_start, today_start)
+
+    # 3-day rolling view (oldest first): feeds / diapers / sleep per day, so the
+    # model sees the trend, not just today.
+    days_3 = []
+    for i in range(2, -1, -1):
+        d_start = today_start - dt.timedelta(days=i)
+        d_end = d_start + dt.timedelta(days=1)
+        cap = (now_local + dt.timedelta(minutes=1)) if i == 0 else d_end
+        days_3.append({
+            "label": d_start.strftime("%b %d"),
+            "feeds": count("feed", d_start, cap),
+            "diapers": count("diaper", d_start, cap),
+            "sleep_min": _sleep_minutes(rows, d_start, d_end, now),
+        })
 
     # average feed gap today (minutes)
     feed_ts = sorted(local(r).timestamp() for r in rows
@@ -99,10 +139,9 @@ async def build_digest(db, cfg, now: dt.datetime | None = None) -> dict:
     return {
         "feeds_today": today["feeds_today"],
         "feeds_by": feed_breakdown,
-        "feeds_yesterday": feeds_yesterday,
+        "days_3": days_3,
         "avg_feed_gap_min": avg_feed_gap,
         "diapers_today": today["diapers_today"],
-        "diapers_yesterday": diapers_yesterday,
         "sleep_today": today["sleep_total_today"],
         "is_sleeping": today["is_sleeping"],
         "pumps_today": today["pumps_today"],
@@ -120,11 +159,10 @@ def render_digest(d: dict) -> str:
     fb = d["feeds_by"]
     parts = [f"{k} {v}" for k, v in fb.items() if v]
     lines.append(f"Feeds today: {d['feeds_today']}"
-                 + (f" ({', '.join(parts)})" if parts else "")
-                 + f" [yesterday {d['feeds_yesterday']}]")
+                 + (f" ({', '.join(parts)})" if parts else ""))
     if d["avg_feed_gap_min"] is not None:
         lines.append(f"Average gap between feeds today: {d['avg_feed_gap_min']} min")
-    lines.append(f"Diapers today: {d['diapers_today']} [yesterday {d['diapers_yesterday']}]")
+    lines.append(f"Diapers today: {d['diapers_today']}")
     lines.append(f"Sleep today: {d['sleep_today']}"
                  + (" (currently sleeping)" if d["is_sleeping"] else ""))
     lines.append(f"Pumps {d['pumps_today']}, baths {d['baths_today']}, "
@@ -140,11 +178,15 @@ def render_digest(d: dict) -> str:
         delta = f" (change {'+' if (g['delta'] or 0) >= 0 else ''}{_fmt(g['delta'])} {g['unit']})" \
             if g["delta"] is not None else ""
         lines.append(f"{labels[k]}: {_fmt(g['value'])} {g['unit']}{delta}")
+    if d.get("days_3"):
+        trend = ", ".join(f"{x['label']} {x['feeds']}f/{x['diapers']}d/{_hm(x['sleep_min'])}"
+                          for x in d["days_3"])
+        lines.append(f"Last 3 days (feeds/diapers/sleep): {trend}")
     return "\n".join(lines)
 
 
 def build_prompt(cfg, digest: dict) -> str:
-    return f"{cfg.summary_prompt}\n\nToday's data:\n{render_digest(digest)}"
+    return f"{cfg.summary_prompt}\n\nRecent activity:\n{render_digest(digest)}"
 
 
 async def generate(db, cfg, mqtt=None, install_token: str | None = None,
