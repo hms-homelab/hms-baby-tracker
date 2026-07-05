@@ -29,6 +29,20 @@ log = logging.getLogger("baby")
 WEB_DIR = Path(__file__).resolve().parent.parent / "web"
 
 
+class NoCacheStaticFiles(StaticFiles):
+    """Serve the SPA with `Cache-Control: no-cache` so the browser revalidates
+    every asset. Without this, an updated add-on keeps serving the old cached
+    app.js/index.html until the browser cache expires — users see the stale UI
+    after an update until they manually clear the cache. `no-cache` still allows
+    efficient 304s via ETag, so it's cheap.
+    """
+
+    async def get_response(self, path, scope):
+        response = await super().get_response(path, scope)
+        response.headers["Cache-Control"] = "no-cache"
+        return response
+
+
 class EventIn(BaseModel):
     event_type: str
     event_subtype: str | None = None
@@ -379,7 +393,7 @@ def create_app(cfg: Config | None = None) -> FastAPI:
         return {"ok": True}
 
     if WEB_DIR.is_dir():
-        app.mount("/", StaticFiles(directory=str(WEB_DIR), html=True), name="web")
+        app.mount("/", NoCacheStaticFiles(directory=str(WEB_DIR), html=True), name="web")
     else:  # dev convenience before the SPA exists
         @app.get("/")
         async def root():

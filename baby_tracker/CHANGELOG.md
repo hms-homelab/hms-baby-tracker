@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026.4.2 - 2026-07-05
+
+- **fix: stale UI after an update.** The Ingress SPA is now served with
+  `Cache-Control: no-cache`, so the browser revalidates `index.html` / `app.js` /
+  `styles.css` on every load (cheap 304s via ETag). Updating the add-on now shows
+  the new UI immediately — no more clearing the browser/app cache by hand.
+
 ## 2026.4.1 - 2026-07-05
 
 The Health and Growth tabs go live (SDD-002, phase 2), completing the six-tab
