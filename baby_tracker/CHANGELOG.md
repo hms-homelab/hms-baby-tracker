@@ -1,6 +1,16 @@
 # Changelog
 
-## 2026.4.6 - unreleased
+## 2026.4.7 - unreleased
+
+- **fix: notifications "SUPERVISOR_TOKEN missing"**
+  ([#3](https://github.com/hms-homelab/hms-baby-tracker/issues/3)). The add-on now
+  also accepts the token under the legacy `HASSIO_TOKEN` variable, which some
+  Supervisor versions inject instead of `SUPERVISOR_TOKEN`. When neither is
+  present the startup log now lists which token-related env vars exist and asks
+  for your HA/Supervisor version, so a lingering case is diagnosable without a
+  reinstall.
+
+## 2026.4.6 - 2026-07-05
 
 - **change: AI summaries are now OFF by default (opt-in)**
   ([#4](https://github.com/hms-homelab/hms-baby-tracker/issues/4)). Nothing ever

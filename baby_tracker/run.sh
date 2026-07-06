@@ -33,10 +33,18 @@ fi
 
 # Report whether the Supervisor injected our API token (needed for phone
 # notifications via the core notify proxy). Never print the token itself.
+# Accept the legacy HASSIO_TOKEN name too: some Supervisor versions inject the
+# token under that older variable instead of SUPERVISOR_TOKEN (issue #3). Mirror
+# it forward so the app (which reads SUPERVISOR_TOKEN) picks it up either way.
+if [ -z "${SUPERVISOR_TOKEN:-}" ] && [ -n "${HASSIO_TOKEN:-}" ]; then
+    export SUPERVISOR_TOKEN="${HASSIO_TOKEN}"
+fi
 if [ -n "${SUPERVISOR_TOKEN:-}" ]; then
-    echo "[baby-tracker] SUPERVISOR_TOKEN present — HA notify proxy available"
+    echo "[baby-tracker] supervisor token present, HA notify proxy available"
 else
-    echo "[baby-tracker] WARNING: SUPERVISOR_TOKEN missing — notifications disabled. Reinstall/update the add-on so the Supervisor re-injects it."
+    echo "[baby-tracker] WARNING: no supervisor token in env, notifications via the HA proxy are disabled."
+    echo "[baby-tracker] token-related env var names present: $(env | cut -d= -f1 | grep -iE 'TOKEN|SUPERVISOR|HASSIO' | tr '\n' ' ')"
+    echo "[baby-tracker] If this persists after an add-on UPDATE (not just a restart), please report your Home Assistant + Supervisor version on issue #3."
 fi
 
 cd /app

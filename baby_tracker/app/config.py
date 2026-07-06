@@ -133,7 +133,9 @@ class Config:
             mqtt_username=env.get("MQTT_USERNAME") or opts.get("mqtt_username"),
             mqtt_password=env.get("MQTT_PASSWORD") or opts.get("mqtt_password"),
             mqtt_enabled=_as_bool(env.get("MQTT_ENABLED", "1")),
-            supervisor_token=env.get("SUPERVISOR_TOKEN"),
+            # Accept the legacy HASSIO_TOKEN name too (issue #3): some Supervisor
+            # versions inject the token under that older variable.
+            supervisor_token=env.get("SUPERVISOR_TOKEN") or env.get("HASSIO_TOKEN"),
             ollama_enabled=_as_bool(env.get("OLLAMA_ENABLED")
                                     or ("1" if opts.get("ollama_enabled") else "0")),
             ollama_url=(env.get("OLLAMA_URL") or opts.get("ollama_url")
