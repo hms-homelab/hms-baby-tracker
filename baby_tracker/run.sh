@@ -14,7 +14,22 @@
 
 set -e
 
-if bashio::services.available "mqtt" 2>/dev/null; then
+# Whether the Supervisor injected our API token (needed for MQTT auto-discovery
+# below and for phone notifications via the core notify proxy). Never print the
+# token itself. Accept the legacy HASSIO_TOKEN name too (some Supervisor
+# versions use it instead), mirrored forward so the app picks it up either way.
+# No token is a normal, silently-handled case, not an error: notifications and
+# MQTT auto-discovery are just skipped, everything else runs as usual.
+if [ -z "${SUPERVISOR_TOKEN:-}" ] && [ -n "${HASSIO_TOKEN:-}" ]; then
+    export SUPERVISOR_TOKEN="${HASSIO_TOKEN}"
+fi
+if [ -n "${SUPERVISOR_TOKEN:-}" ]; then
+    echo "[baby-tracker] supervisor token present, HA notify proxy available"
+else
+    echo "[baby-tracker] no supervisor token found, phone notifications via HA are disabled (everything else works as normal)"
+fi
+
+if [ -n "${SUPERVISOR_TOKEN:-}" ] && bashio::services.available "mqtt" 2>/dev/null; then
     # PRIMARY: broker supplied by the Supervisor (Mosquitto add-on, etc.)
     export MQTT_HOST="$(bashio::services mqtt 'host' 2>/dev/null)"
     export MQTT_PORT="$(bashio::services mqtt 'port' 2>/dev/null)"
@@ -23,28 +38,13 @@ if bashio::services.available "mqtt" 2>/dev/null; then
     echo "[baby-tracker] MQTT: using the Supervisor-provided broker at ${MQTT_HOST}:${MQTT_PORT} (auto-discovered, no config needed)"
 else
     # FALLBACK: external broker from the mqtt_host option (read by app/config.py).
+    # Also the only path when there's no Supervisor token to query the API with.
     MQTT_HOST_OPT="$(python3 -c 'import json;print(json.load(open("/data/options.json")).get("mqtt_host") or "")' 2>/dev/null || true)"
     if [ -n "${MQTT_HOST_OPT}" ]; then
         echo "[baby-tracker] MQTT: no Supervisor broker; using external mqtt_host=${MQTT_HOST_OPT} (fallback)"
     else
         echo "[baby-tracker] MQTT: no Supervisor broker and no mqtt_host set — bridge disabled (install Mosquitto, or set mqtt_host)"
     fi
-fi
-
-# Report whether the Supervisor injected our API token (needed for phone
-# notifications via the core notify proxy). Never print the token itself.
-# Accept the legacy HASSIO_TOKEN name too: some Supervisor versions inject the
-# token under that older variable instead of SUPERVISOR_TOKEN (issue #3). Mirror
-# it forward so the app (which reads SUPERVISOR_TOKEN) picks it up either way.
-if [ -z "${SUPERVISOR_TOKEN:-}" ] && [ -n "${HASSIO_TOKEN:-}" ]; then
-    export SUPERVISOR_TOKEN="${HASSIO_TOKEN}"
-fi
-if [ -n "${SUPERVISOR_TOKEN:-}" ]; then
-    echo "[baby-tracker] supervisor token present, HA notify proxy available"
-else
-    echo "[baby-tracker] WARNING: no supervisor token in env, notifications via the HA proxy are disabled."
-    echo "[baby-tracker] token-related env var names present: $(env | cut -d= -f1 | grep -iE 'TOKEN|SUPERVISOR|HASSIO' | tr '\n' ' ')"
-    echo "[baby-tracker] If this persists after an add-on UPDATE (not just a restart), please report your Home Assistant + Supervisor version on issue #3."
 fi
 
 cd /app

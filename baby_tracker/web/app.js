@@ -83,6 +83,7 @@
   var editingId = null;   // id of the journal row whose inline editor is open
   var currentTab = "baby";
   var lastEntries = [];   // cache of the latest journal entries (for the ctx readout)
+  var lastSummaryData = null; // cache of the latest /api/log payload (re-render on pin toggle)
   var feverThresholdC = 38.0;  // from /api/config
   var imperial = true;          // from /api/config measurement_system
   var noteSpecial = false;      // shared note bar ⭐ toggle state
@@ -174,28 +175,118 @@
   }
 
   // --- Summary + journal rendering ---------------------------------------
-  function fmtAgo(min) { return (min === null || min === undefined) ? "—" : min + "min ago"; }
+  // Issue #1 follow-up: hours + minutes past the 1h mark so users don't have to
+  // do the math themselves, e.g. "15m", "2h", "1h 35m" (matches the "Xh Ym"
+  // convention used elsewhere for durations, e.g. sleep_total_today).
+  function fmtAgo(min) {
+    if (min === null || min === undefined) return "—";
+    if (min < 60) return min + "m";
+    var hrs = Math.floor(min / 60), rem = min % 60;
+    return hrs + "h" + (rem ? " " + rem + "m" : "");
+  }
+  function fmtAgoSuffix(min) { return (min === null || min === undefined) ? "" : " ago"; }
   function fmtType(t) { return t ? " (" + t + ")" : ""; }
 
+  // Any auxiliary stat (pumps, baths, contractions, temp, ...) can be tapped
+  // to "pin" it up into the same big stat-card format as Last feed / Last
+  // diaper / Asleep, or tapped again to send it back down into the chip tray.
+  // Persisted in localStorage so the layout survives a refresh.
+  var PIN_KEY = "babytracker_pinned_stats";
+  function loadPinned() {
+    try { return JSON.parse(localStorage.getItem(PIN_KEY) || "[]"); } catch (e) { return []; }
+  }
+  function savePinned(arr) {
+    try { localStorage.setItem(PIN_KEY, JSON.stringify(arr)); } catch (e) {}
+  }
+  function togglePinned(key) {
+    var p = loadPinned();
+    var i = p.indexOf(key);
+    if (i >= 0) p.splice(i, 1); else p.push(key);
+    savePinned(p);
+    if (lastSummaryData) renderSummary(lastSummaryData);
+  }
+
+  function statCard(item) {
+    var el = document.createElement("div");
+    el.className = "stat clickable";
+    el.title = "Tap to unpin";
+    el.addEventListener("click", function () { togglePinned(item.key); });
+    var ico = document.createElement("div");
+    ico.className = "stat-ico";
+    ico.style.setProperty("--accent", item.accent);
+    ico.textContent = item.icon;
+    var text = document.createElement("div");
+    text.className = "stat-text";
+    var label = document.createElement("div");
+    label.className = "stat-label";
+    label.textContent = item.label;
+    var val = document.createElement("div");
+    val.className = "stat-value";
+    val.textContent = item.value;
+    text.appendChild(label);
+    text.appendChild(val);
+    el.appendChild(ico);
+    el.appendChild(text);
+    return el;
+  }
+
+  function statChip(item) {
+    var chip = document.createElement("span");
+    chip.className = "chip" + (item.warn ? " warn" : "");
+    chip.title = "Tap to pin";
+    chip.addEventListener("click", function () { togglePinned(item.key); });
+    chip.appendChild(document.createTextNode(item.icon + " " + item.label + " "));
+    var b = document.createElement("b");
+    b.textContent = item.value;
+    chip.appendChild(b);
+    return chip;
+  }
+
+  // Renders each aux item as a pinned stat-card or an unpinned chip, per the
+  // saved pin set.
+  function renderAuxStats(items) {
+    var pinned = loadPinned();
+    var extraEl = document.getElementById("sum-extra");
+    var chipsEl = document.getElementById("sum-chips");
+    extraEl.textContent = "";
+    chipsEl.textContent = "";
+    items.forEach(function (it) {
+      if (pinned.indexOf(it.key) >= 0) extraEl.appendChild(statCard(it));
+      else chipsEl.appendChild(statChip(it));
+    });
+  }
+
   function renderSummary(data) {
+    lastSummaryData = data;
     var stats = (data && data.stats) || {};
     var extras = (data && data.summary_extras) || {};
     var entries = (data && data.entries) || lastEntries || [];
-    document.getElementById("sum-feed").textContent =
-      "🍼 Last feed: " + fmtAgo(stats.last_feed_min) + fmtType(stats.last_feed_type) +
-      " | Today: " + stats.feeds_today;
-    document.getElementById("sum-diaper").textContent =
-      "🧷 Last diaper: " + fmtAgo(stats.last_diaper_min) + fmtType(stats.last_diaper_type) +
-      " | Today: " + stats.diapers_today;
-    document.getElementById("sum-sleep").textContent =
-      "😴 Sleep today: " + stats.sleep_total_today + " | " +
-      (stats.is_sleeping ? "💤 Currently sleeping" : "🌙 Awake");
-    document.getElementById("sum-other").textContent =
-      "🫙 Pumps: " + stats.pumps_today + " | 🛁 Baths: " + stats.baths_today +
-      " | 💊 Medicine: " + stats.medicines_today + " | 🤸 Tummy time: " + stats.tummy_times_today;
+    var now = Date.now();
+
+    document.getElementById("sum-feed-val").textContent =
+      fmtAgo(stats.last_feed_min) + fmtAgoSuffix(stats.last_feed_min);
+    document.getElementById("sum-feed-sub").textContent =
+      (stats.last_feed_type ? stats.last_feed_type + " · " : "") + "Today: " + stats.feeds_today;
+    document.getElementById("sum-diaper-val").textContent =
+      fmtAgo(stats.last_diaper_min) + fmtAgoSuffix(stats.last_diaper_min);
+    document.getElementById("sum-diaper-sub").textContent =
+      (stats.last_diaper_type ? stats.last_diaper_type + " · " : "") + "Today: " + stats.diapers_today;
+
+    // Sleep: state (asleep/awake) + how long that state has lasted, computed
+    // from the most recent sleep start/end in the journal (entries are
+    // newest-first), plus the running total for today as a caption.
+    var lastSleep = null;
+    for (var i = 0; i < entries.length; i++) {
+      if (entries[i].event_type === "sleep") { lastSleep = entries[i]; break; }
+    }
+    var sinceMin = lastSleep ? Math.round((now - new Date(lastSleep.logged_at).getTime()) / 60000) : null;
+    document.getElementById("sum-sleep-ico").textContent = stats.is_sleeping ? "😴" : "🌙";
+    document.getElementById("sum-sleep-label").textContent = stats.is_sleeping ? "Asleep" : "Awake";
+    document.getElementById("sum-sleep-val").textContent = sinceMin === null ? "—" : fmtAgo(sinceMin);
+    document.getElementById("sum-sleep-sub").textContent = "Slept " + stats.sleep_total_today + " today";
 
     // Contractions / Get Ready / Health / Growth roll-up
-    var now = Date.now(), win = 2 * 3600 * 1000;
+    var win = 2 * 3600 * 1000;
     var ctxToday = 0, ctx2h = 0, lastTemp = null, lastWeight = null;
     entries.forEach(function (e) {
       if (e.event_type === "contraction") {
@@ -206,9 +297,6 @@
       if (!lastWeight && e.event_type === "weight" && e.value != null) lastWeight = e;
     });
     var cl = extras.checklist || { done: 0, total: 0 };
-    document.getElementById("sum-track").textContent =
-      "⏱️ Contractions: " + ctxToday + (ctx2h ? " (" + ctx2h + " in 2h)" : "")
-      + " | 🎒 Ready: " + cl.done + "/" + cl.total;
 
     var fever = false, tempStr = "—";
     if (lastTemp) {
@@ -216,8 +304,18 @@
       fever = isFever(lastTemp.value, lastTemp.value_unit || "");
     }
     var wStr = lastWeight ? fmtMeasure(lastWeight.value, lastWeight.value_unit) : "—";
-    document.getElementById("sum-vitals").textContent =
-      "🌡️ Temp: " + tempStr + (fever ? " ⚠" : "") + " | 📈 Weight: " + wStr;
+
+    renderAuxStats([
+      { key: "pumps", icon: "🫙", label: "Pumps", value: stats.pumps_today, accent: "#B19CD9" },
+      { key: "baths", icon: "🛁", label: "Baths", value: stats.baths_today, accent: "#6FD1D1" },
+      { key: "meds", icon: "💊", label: "Meds", value: stats.medicines_today, accent: "#E06B6B" },
+      { key: "tummy", icon: "🤸", label: "Tummy", value: stats.tummy_times_today, accent: "#5BD6A0" },
+      { key: "contractions", icon: "⏱️", label: "Contractions",
+        value: ctxToday + (ctx2h ? " (" + ctx2h + " in 2h)" : ""), accent: "#E06B6B" },
+      { key: "ready", icon: "🎒", label: "Ready", value: cl.done + "/" + cl.total, accent: "#9A86D4" },
+      { key: "temp", icon: "🌡️", label: "Temp", value: tempStr, warn: fever, accent: "#E8A84E" },
+      { key: "weight", icon: "📈", label: "Weight", value: wStr, accent: "#6FB1C9" },
+    ]);
 
     // Notifications / alerts strip (fever + supply low/refill-due)
     var sup = extras.supplies || { low: [], due: [] };
@@ -408,7 +506,7 @@
       var avg = diffs.reduce(function (a, b) { return a + b; }, 0) / diffs.length;
       gap = " · avg gap " + Math.round(avg / 60000) + " min";
     }
-    el.textContent = recent.length + " in last 2h · last " + lastMin + " min ago" + gap;
+    el.textContent = recent.length + " in last 2h · last " + fmtAgo(lastMin) + " ago" + gap;
   }
 
   // --- AI daily summary ---------------------------------------------------

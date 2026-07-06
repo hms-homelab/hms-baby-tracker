@@ -1,6 +1,25 @@
 # Changelog
 
-## 2026.4.7 - unreleased
+## 2026.4.8 - unreleased
+
+- **feat: redesigned summary card**
+  ([#1](https://github.com/hms-homelab/hms-baby-tracker/issues/1)). Last feed,
+  last diaper and sleep are now clear stat cards instead of cramped
+  pipe-separated text lines, and all read in hours + minutes (`15m`, `2h`,
+  `1h 35m`) rather than raw minutes. The sleep card now shows whether baby is
+  currently asleep or awake and for how long, plus total sleep today. Pumps,
+  baths, medicine, tummy time, contractions, Get Ready, temperature and weight
+  are compact tappable chips; tap one to pin it up into a full stat card (tap
+  again to unpin). Your pinned layout is remembered on this device.
+- **fix: a missing Supervisor token no longer logs as an error**
+  ([#3](https://github.com/hms-homelab/hms-baby-tracker/issues/3)). No token is
+  now treated as a normal, silently-handled case: notifications and MQTT
+  auto-discovery are just skipped and everything else runs as usual, instead of
+  printing a WARNING plus a `bashio` `ERROR: Unable to access the API,
+  forbidden` (from probing the Supervisor for MQTT with no token to
+  authenticate with).
+
+## 2026.4.7 - 2026-07-06
 
 - **fix: notifications "SUPERVISOR_TOKEN missing"**
   ([#3](https://github.com/hms-homelab/hms-baby-tracker/issues/3)). The add-on now
