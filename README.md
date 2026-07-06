@@ -94,8 +94,6 @@ fewer diapers than yesterday, a fever).
   drives its OLED (last feed/pump + next-pump reminder).
 - **Self-contained**: SQLite under `/data`, survives restarts, with an optional
   external `database_url` (PostgreSQL).
-- **Quiet until you ask for it**: notifications only fire once you set
-  `notify_targets` or wire up your own `baby/alert` / `baby/event` automation.
 
 > **Want the physical button remote?** The 3D-printed ESP32 remote that drives
 > this dashboard has build details, photos and a demo on its
@@ -143,9 +141,9 @@ Config is via **env vars** instead of HA options: `TZ`, `PUMP_HOURS`,
 `DATABASE_URL`, `DATA_DIR`, `DEFAULT_TAB`, `MEASUREMENT_SYSTEM`,
 `FEVER_THRESHOLD_C`, `SUPPLY_REMINDER_HOUR`, `CHECKLIST_RESET_HOUR`,
 `SUMMARY_ENABLED`, `SUMMARY_PROVIDER`, `SUMMARY_HOSTED_URL`, `SUMMARY_API_KEY`.
-Point the ESP32 remote's MQTT at the broker and presses log straight in. (HA
-`notify` targets only work as the add-on; `baby/event` and `baby/alert` still
-fire for your own MQTT automations.) Images are multi-arch (amd64 + arm64).
+Point the ESP32 remote's MQTT at the broker and presses log straight in;
+`baby/event` and `baby/alert` fire the same way for your own MQTT automations.
+Images are multi-arch (amd64 + arm64).
 
 ## Architecture
 
@@ -158,7 +156,7 @@ REST POST /api/event ─┼─▶ Baby Tracker (Docker, /data SQLite or Postgres
                       │     ├─ APScheduler: pump/feed + supply + checklist + summary jobs
                       │     └─ MQTT: discovery + baby/state + baby/event + baby/alert
                       ▼
-        HA entities + your automations + phone notifications
+        HA entities + your automations
                       │
       AI summary ─────┘  anonymized digest ─▶ hosted proxy / your Ollama / API key
 ```
@@ -180,7 +178,6 @@ REST POST /api/event ─┼─▶ Baby Tracker (Docker, /data SQLite or Postgres
 | `feed_hours` | float | `3` | Hours after the last feed before the feed reminder fires |
 | `supply_reminder_hour` | int | `9` | Local hour for the daily low-stock / refill-due sweep |
 | `checklist_reset_hour` | int | `0` | Local hour to auto-uncheck the Get Ready list (`0` = off) |
-| `notify_targets` | list | `[]` | HA `notify` service names (without `notify.`) for alerts |
 | `mqtt_host` | string | `""` | Fallback broker. Blank auto-discovers the Mosquitto/Supervisor broker |
 | `mqtt_port` | port | `1883` | External broker port (fallback only) |
 | `mqtt_username` / `mqtt_password` | string | `""` | External broker credentials, if it requires auth |

@@ -33,7 +33,6 @@ automations. Stats are exposed back to Home Assistant as native entities.
 | `timezone`       | string          | `America/New_York` | IANA timezone used for "today" rollover and the formatted timestamps in the log.            |
 | `pump_hours`     | float           | `2`                | Hours after a pump event before a pump reminder is fired (also the pump-due threshold shown on the remote's OLED). |
 | `feed_hours`     | float           | `3`                | Hours after a feed event before a feed reminder is fired.                                   |
-| `notify_targets` | list of strings | `[]`               | Home Assistant `notify` service names (without the `notify.` prefix) to send alerts to.     |
 | `default_tab`    | list            | `baby`             | Which tab the web UI opens on (`get_ready`, `baby`, `contractions`, `health`, `growth`, `supplies`). Lead with `contractions`/`get_ready` pre-birth, then switch to `baby`. |
 | `supply_reminder_hour` | int (0-23) | `9`               | Local hour for the daily supplies sweep that reminds you about low-stock and refill-due items. |
 | `checklist_reset_hour` | int (0-23) | `0`               | Local hour to auto-uncheck the Get Ready checklist each morning. `0` = off (the default, since the seeded items are mostly one-time prep). |
@@ -72,9 +71,6 @@ Example configuration:
 ```yaml
 timezone: America/New_York
 pump_hours: 2.5
-notify_targets:
-  - mobile_app_your_phone
-  - mobile_app_partner_phone
 database_url: ""
 ```
 
@@ -136,28 +132,24 @@ On connect, the add-on publishes MQTT discovery so these appear under a single
 
 ## Phone notifications
 
-To receive a push notification on each logged event (and pump reminders), add
-one or more Home Assistant `notify` service names to `notify_targets`. Use the
-service name **without** the `notify.` prefix — e.g. for
-`notify.mobile_app_pixel_8` enter `mobile_app_pixel_8`.
+Notifications are **MQTT-based only**: build a Home Assistant automation
+against the events the add-on publishes (below). There is no built-in
+`notify_targets` option; an earlier version had one, calling HA's `notify.*`
+services through the Supervisor's API proxy, but that proxy call depends on a
+per-add-on Supervisor token that has proven unreliable across real installs
+(a known, long-standing, unresolved upstream Home Assistant Supervisor issue,
+see the project changelog). MQTT has no such dependency, so it's the only
+notification path now.
 
-These are typically the `mobile_app_*` services created by the Home Assistant
-Companion app on each phone. Save the configuration and restart the add-on for
-changes to take effect.
-
-### Build your own automation (MQTT)
-
-If `notify_targets` doesn't fit your needs — e.g. you want to pick targets
-dynamically, add conditions, or only notify on certain event types — the add-on
-**publishes every stored event on MQTT** so you can trigger any automation:
+The add-on **publishes every stored event on MQTT** so you can trigger any
+automation:
 
 - **Topic:** `baby/event` (non-retained — fires once per logged event)
 - **Payload (JSON):** `event_type`, `event_subtype`, `note`, `logged_at`,
   `title`, `message`, `id`, `source` (`api` for the web UI/app REST, or `mqtt`
   for the remote/HA buttons).
 
-This fires for **every** source and is independent of `notify_targets`. Example
-— notify a phone on every feed:
+This fires for **every** source. Example — notify a phone on every feed:
 
 ```yaml
 automation:

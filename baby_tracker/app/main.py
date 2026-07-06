@@ -2,7 +2,9 @@
 
 A single funnel, `ingest_and_broadcast`, is shared by the REST API and the MQTT
 subscriber so every event path behaves identically: store -> (arm pump/feed) ->
-publish MQTT state -> notify.
+publish MQTT state/alerts. Phone notifications are MQTT-based (HA automations
+reacting to `baby/event`/`baby/alert`), not a built-in Supervisor-proxy push
+(removed, see CHANGELOG - the Supervisor token this needed is unreliable).
 """
 from __future__ import annotations
 
@@ -19,7 +21,7 @@ from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from . import assessment, ingest, llm, notify, summary, supplies
+from . import assessment, ingest, llm, summary, supplies
 from .config import Config
 from .db import Database, EXPORT_TABLES
 from .mqtt import MqttBridge
@@ -214,16 +216,14 @@ def create_app(cfg: Config | None = None) -> FastAPI:
             await reminders.refresh_display()
         # Fire the stored event on MQTT (`baby/event`) so HA automations can
         # trigger on it and notify phones — for every source (web UI, app REST,
-        # or the remote), independent of the add-on's own `notify_targets`.
+        # or the remote).
         await mqtt.publish_event({**row, "source": source})
-        await notify.notify(cfg, row["title"], row["message"])
         # Server-side fever alert: a LIVE temperature at/above the threshold fires
-        # on the unified baby/alert bus + notifies (mirrors the UI's fever badge).
+        # on the unified baby/alert bus (mirrors the UI's fever badge).
         if logged_at is None and event_type == "temperature" and value is not None:
             c = (value - 32) * 5 / 9 if (value_unit and "F" in value_unit) else value
             if c >= cfg.fever_threshold_c:
                 ft, fm = "🌡️ Fever", f"Temperature {ingest._fmt_value(value, value_unit)} — at/above the fever threshold."
-                await notify.notify(cfg, ft, fm)
                 await mqtt.publish_alert("fever", ft, fm, {"value": value, "unit": value_unit})
         # Contraction AI assessment (n8n "Contraction AI Assessment" webhook).
         # No-op unless ollama_enabled; runs after the event is stored so the

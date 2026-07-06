@@ -20,7 +20,7 @@ from zoneinfo import ZoneInfo
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
-from . import display, notify, supplies
+from . import display, supplies
 
 log = logging.getLogger("baby.scheduler")
 
@@ -81,11 +81,9 @@ class Reminders:
             await self.fire_supply_reminder(s, s.get("reasons", []))
 
     async def fire_supply_reminder(self, supply: dict, reasons: list) -> None:
-        """Deliver one supply reminder over notify + MQTT (shared by the sweep and
-        the immediate threshold-cross path in the ingest funnel)."""
+        """Deliver one supply reminder over MQTT (shared by the sweep and the
+        immediate threshold-cross path in the ingest funnel)."""
         title, message = supplies.reminder_text(supply, reasons)
-        with contextlib.suppress(Exception):
-            await notify.notify(self.cfg, title, message)
         if self.mqtt is not None:
             kind = "supply_low" if "low" in reasons else "supply_due"
             tag = {"supply": {k: supply.get(k) for k in ("id", "category", "name")}}
@@ -142,7 +140,6 @@ class Reminders:
             f"Time to pump again! Last pump ({side}) was at {pump_time} "
             f"— {self._hrs(self.cfg.pump_hours)} hours ago."
         )
-        await notify.notify(self.cfg, title, message)
         if self.mqtt is not None:
             with contextlib.suppress(Exception):
                 await self.mqtt.publish_alert("pump_reminder", title, message, {"side": side})
@@ -154,7 +151,6 @@ class Reminders:
             f"Time to feed again! Last feed{what} was at {feed_time} "
             f"— {self._hrs(self.cfg.feed_hours)} hours ago."
         )
-        await notify.notify(self.cfg, title, message)
         # Transient OLED banner on the device (n8n "Notify Device" node).
         if self.mqtt is not None:
             await self.mqtt.publish_reminder(

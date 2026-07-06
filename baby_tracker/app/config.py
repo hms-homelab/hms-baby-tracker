@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import json
 import os
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 
 OPTIONS_PATH = Path(os.environ.get("OPTIONS_PATH", "/data/options.json"))
@@ -37,7 +37,6 @@ class Config:
     timezone: str = "America/New_York"
     pump_hours: float = 2.0
     feed_hours: float = 3.0
-    notify_targets: list[str] = field(default_factory=list)
     # UI: which tab the Ingress SPA opens on (get_ready|baby|contractions|
     # health|growth|supplies). Changeable so an install can lead with
     # contractions/get_ready pre-birth and switch to baby after.
@@ -96,7 +95,6 @@ class Config:
             timezone=opts.get("timezone") or env.get("TZ", "America/New_York"),
             pump_hours=float(opts.get("pump_hours", env.get("PUMP_HOURS", 2.0))),
             feed_hours=float(opts.get("feed_hours", env.get("FEED_HOURS", 3.0))),
-            notify_targets=opts.get("notify_targets") or _split(env.get("NOTIFY_TARGETS")),
             default_tab=(opts.get("default_tab") or env.get("DEFAULT_TAB") or "baby"),
             supply_reminder_hour=int(opts.get("supply_reminder_hour",
                                               env.get("SUPPLY_REMINDER_HOUR", 9))),
@@ -146,10 +144,6 @@ class Config:
                                  or opts.get("ollama_timeout") or 30.0),
             ollama_prompt=(env.get("OLLAMA_PROMPT") or opts.get("ollama_prompt") or None),
         )
-
-
-def _split(val: str | None) -> list[str]:
-    return [s.strip() for s in val.split(",") if s.strip()] if val else []
 
 
 def _as_bool(val: str | None) -> bool:

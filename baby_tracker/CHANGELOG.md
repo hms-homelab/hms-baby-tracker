@@ -1,6 +1,21 @@
 # Changelog
 
-## 2026.4.8 - unreleased
+## 2026.4.9 - unreleased
+
+- **removed: phone notifications via `notify_targets`**
+  ([#3](https://github.com/hms-homelab/hms-baby-tracker/issues/3)). This called
+  Home Assistant's `notify.*` services through the Supervisor's API proxy,
+  which needs a per-add-on Supervisor token. That token has proven unreliable
+  in practice: it's been missing at boot on real, correctly-configured HAOS
+  installs (not a user-environment issue), matching a class of long-standing,
+  unresolved Supervisor bugs reported across many unrelated add-ons since at
+  least 2021 with no consistent fix. Rather than ship a feature that silently
+  doesn't work, it's removed. Use an MQTT automation instead (documented in
+  "Phone notifications" in the README/DOCS), which needs no Supervisor token
+  and achieves the same result. `notify_targets` is gone from `config.yaml`; add-ons
+  already using it can delete the option.
+
+## 2026.4.8 - 2026-07-06
 
 - **feat: redesigned summary card**
   ([#1](https://github.com/hms-homelab/hms-baby-tracker/issues/1)). Last feed,
