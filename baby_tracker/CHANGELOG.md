@@ -1,5 +1,22 @@
 # Changelog
 
+## 2026.4.10 - unreleased
+
+- **fixed: "Last Feed" / "Last Diaper" entities are now timestamps**
+  ([#6](https://github.com/hms-homelab/hms-baby-tracker/issues/6)). They
+  published a minute count into retained MQTT state, which is a snapshot: it
+  read 0 right after logging and only changed when state was republished, and
+  the entity's own last-changed was polluted by unrelated logs/edits/deletes.
+  They are now `device_class: timestamp` sensors holding the actual event time,
+  so a dashboard shows a live, self-ticking "x minutes ago" that tracks the real
+  last feed/diaper and nothing else. (The add-on's own web UI is unchanged.)
+- **fixed: numeric readings no longer show single-precision float noise.** The
+  Postgres archive stores `value` as `real`, so a clean 100.8 read back as
+  100.80000305175781 and rendered with 8-9 junk digits in Home Assistant, the
+  panel and notifications. Readings (temperature, weight, length, head) are now
+  rounded on read; the value never carries more than 2 real decimals so this is
+  lossless.
+
 ## 2026.4.9 - unreleased
 
 - **removed: phone notifications via `notify_targets`**

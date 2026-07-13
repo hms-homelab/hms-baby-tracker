@@ -53,16 +53,18 @@ def compute(rows: list[dict], timezone: str = "America/New_York",
         return next((r for r in rows if r["event_type"] == t), None)
 
     last_feed = first_of("feed")
-    last_feed_min = last_feed_type = None
+    last_feed_min = last_feed_type = last_feed_at = None
     if last_feed:
         last_feed_min = _js_round((now_ms - _epoch_ms(last_feed["logged_at"])) / 60000)
         last_feed_type = last_feed.get("event_subtype") or None
+        last_feed_at = last_feed["logged_at"]
 
     last_diaper = first_of("diaper")
-    last_diaper_min = last_diaper_type = None
+    last_diaper_min = last_diaper_type = last_diaper_at = None
     if last_diaper:
         last_diaper_min = _js_round((now_ms - _epoch_ms(last_diaper["logged_at"])) / 60000)
         last_diaper_type = last_diaper.get("event_subtype") or None
+        last_diaper_at = last_diaper["logged_at"]
 
     latest_sleep = first_of("sleep")
     is_sleeping = bool(latest_sleep and latest_sleep.get("event_subtype") == "start")
@@ -83,8 +85,10 @@ def compute(rows: list[dict], timezone: str = "America/New_York",
     stats = {
         "last_feed_min": last_feed_min,
         "last_feed_type": last_feed_type,
+        "last_feed_at": last_feed_at,
         "last_diaper_min": last_diaper_min,
         "last_diaper_type": last_diaper_type,
+        "last_diaper_at": last_diaper_at,
         "feeds_today": len(feeds_today),
         "diapers_today": len(diapers_today),
         "sleep_total_today": f"{sleep_min // 60}h {sleep_min % 60}m",

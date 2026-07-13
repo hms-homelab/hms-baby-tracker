@@ -55,16 +55,21 @@ DEVICE = {
     "model": "Baby Tracker App",
 }
 
-# (object_id, friendly name, value_template, unit)
+# (object_id, friendly name, value_template, unit, device_class)
+# "Last Feed"/"Last Diaper" are timestamp sensors (the actual event time), NOT a
+# minute count: a snapshot count published into retained state is frozen between
+# publishes (reads 0 right after a log) and the entity's last-changed is polluted
+# by unrelated edits/deletes (issue #6). As a timestamp device_class HA renders a
+# live, self-ticking "X minutes ago" that tracks the real event and nothing else.
 SENSORS = [
-    ("last_feed", "Last Feed", "{{ value_json.last_feed_min }}", "min"),
-    ("last_diaper", "Last Diaper", "{{ value_json.last_diaper_min }}", "min"),
-    ("feeds_today", "Feeds Today", "{{ value_json.feeds_today }}", None),
-    ("diapers_today", "Diapers Today", "{{ value_json.diapers_today }}", None),
-    ("sleep_today", "Sleep Today", "{{ value_json.sleep_total_today }}", None),
-    ("contractions_today", "Contractions Today", "{{ value_json.contractions_today }}", None),
-    ("get_ready", "Get Ready", "{{ value_json.checklist_done }}/{{ value_json.checklist_total }}", None),
-    ("supplies_low", "Low Supplies", "{{ value_json.supplies_low }}", None),
+    ("last_feed", "Last Feed", "{% if value_json.last_feed_at %}{{ value_json.last_feed_at }}{% endif %}", None, "timestamp"),
+    ("last_diaper", "Last Diaper", "{% if value_json.last_diaper_at %}{{ value_json.last_diaper_at }}{% endif %}", None, "timestamp"),
+    ("feeds_today", "Feeds Today", "{{ value_json.feeds_today }}", None, None),
+    ("diapers_today", "Diapers Today", "{{ value_json.diapers_today }}", None, None),
+    ("sleep_today", "Sleep Today", "{{ value_json.sleep_total_today }}", None, None),
+    ("contractions_today", "Contractions Today", "{{ value_json.contractions_today }}", None, None),
+    ("get_ready", "Get Ready", "{{ value_json.checklist_done }}/{{ value_json.checklist_total }}", None, None),
+    ("supplies_low", "Low Supplies", "{{ value_json.supplies_low }}", None, None),
 ]
 
 # (object_id, friendly name, event_type, event_subtype)
@@ -327,7 +332,7 @@ class MqttBridge:
         if c is None:
             return
         common = {"availability_topic": STATUS_TOPIC, "device": DEVICE}
-        for oid, name, tmpl, unit in SENSORS:
+        for oid, name, tmpl, unit, device_class in SENSORS:
             cfg = {
                 "name": name,
                 "unique_id": f"baby_{oid}",
@@ -337,6 +342,8 @@ class MqttBridge:
             }
             if unit:
                 cfg["unit_of_measurement"] = unit
+            if device_class:
+                cfg["device_class"] = device_class
             await c.publish(f"{DISCOVERY_PREFIX}/sensor/baby_tracker/{oid}/config",
                             json.dumps(cfg), qos=1, retain=True)
         # binary_sensor: sleeping

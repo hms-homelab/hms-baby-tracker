@@ -120,9 +120,12 @@ mosquitto_pub -t baby/remote/event \
 On connect, the add-on publishes MQTT discovery so these appear under a single
 **Baby Tracker** device with no manual YAML:
 
-- Sensors: **Last Feed** (min), **Last Diaper** (min), **Feeds Today**,
-  **Diapers Today**, **Sleep Today**, **Contractions Today**, **Get Ready**
-  (done/total), **Low Supplies** (count).
+- Sensors: **Last Feed** (timestamp), **Last Diaper** (timestamp), **Feeds
+  Today**, **Diapers Today**, **Sleep Today**, **Contractions Today**, **Get
+  Ready** (done/total), **Low Supplies** (count). Last Feed/Last Diaper are
+  `timestamp` entities holding the actual event time, so a dashboard shows a
+  live, self-ticking "x minutes ago" that stays accurate (it is not affected by
+  unrelated logs, edits or deletes).
 - Sensors (only when `ollama_enabled`): **Contraction Assessment** and
   **Contraction Assessment Time**.
 - Binary sensor: **Sleeping** (occupancy).
