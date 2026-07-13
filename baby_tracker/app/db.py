@@ -63,6 +63,24 @@ def _json_safe(v):
     return v
 
 
+def _round_value(v):
+    """Trim single-precision float noise off a numeric reading on read.
+
+    The Postgres archive stores `value` as `real` (4-byte single precision), so
+    100.8 comes back as 100.80000305175781 and, rendered raw, shows 8-9 junk
+    digits in the UI/notifications. Readings (temperature, weight, length, head)
+    never carry more than 2 real decimals, so rounding there is lossless and
+    kills the artifact for every consumer (web, MQTT, title/message, summary)."""
+    return round(v, 2) if isinstance(v, float) else v
+
+
+def _clean_row(d: dict) -> dict:
+    """Round a row's numeric `value` in place (see `_round_value`)."""
+    if d.get("value") is not None:
+        d["value"] = _round_value(d["value"])
+    return d
+
+
 def _now_iso() -> str:
     return dt.datetime.now(dt.timezone.utc).isoformat()
 
@@ -223,7 +241,7 @@ class SqliteDatabase:
             rows = await cur.fetchall()
         out = []
         for r in rows:
-            d = dict(r)
+            d = _clean_row(dict(r))
             d["time"] = _fmt_time(d["logged_at"], self.tz)
             out.append(d)
         return out
@@ -239,7 +257,7 @@ class SqliteDatabase:
                 (event_type,),
             )
             r = await cur.fetchone()
-        return dict(r) if r else None
+        return _clean_row(dict(r)) if r else None
 
     async def metric_series(self, event_type: str, limit: int = 30) -> list[dict]:
         """Last `limit` numeric readings of a type, OLDEST->newest (for trends)."""
@@ -254,7 +272,7 @@ class SqliteDatabase:
                 (event_type, limit),
             )
             rows = await cur.fetchall()
-        out = [dict(r) for r in rows]
+        out = [_clean_row(dict(r)) for r in rows]
         for d in out:
             d["time"] = _fmt_time(d["logged_at"], self.tz)
         out.reverse()
@@ -271,7 +289,7 @@ class SqliteDatabase:
                 (event_id,),
             )
             r = await cur.fetchone()
-        return dict(r) if r else None
+        return _clean_row(dict(r)) if r else None
 
     async def update_event(self, event_id: int, logged_at=_UNSET, note=_UNSET,
                            event_subtype=_UNSET) -> dict | None:
@@ -706,7 +724,7 @@ class PostgresDatabase:
             if la.tzinfo is None:
                 la = la.replace(tzinfo=dt.timezone.utc)
             d["logged_at"] = la.isoformat()
-        return d
+        return _clean_row(d)
 
     async def recent(self, limit: int = 200) -> list[dict]:
         pool = await self._get_pool()
