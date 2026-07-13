@@ -1,6 +1,6 @@
 # Changelog
 
-## 2026.4.10 - unreleased
+## 2026.4.10 - 2026-07-13
 
 - **fixed: "Last Feed" / "Last Diaper" entities are now timestamps**
   ([#6](https://github.com/hms-homelab/hms-baby-tracker/issues/6)). They
