@@ -97,9 +97,7 @@ fewer diapers than yesterday, a fever).
 
 > **Want the physical button remote?** The 3D-printed ESP32 remote that drives
 > this dashboard has build details, photos and a demo on its
-> **[project page](https://shmaestro.com/projects/baby-tracker)**. Rather not print
-> and solder your own? A pre-built unit is **[available here](https://shop.shmaestro.com/products/baby-tracker)**.
-> Either way the add-on works fully standalone.
+> **[project page](https://shmaestro.com/projects/baby-tracker)**. 
 
 <p align="center">
   <img src="images/baby-remote.jpg" alt="The 3D-printed ESP32 Baby Remote: a translucent enclosure with labeled buttons and a 0.96-inch OLED" width="320">
