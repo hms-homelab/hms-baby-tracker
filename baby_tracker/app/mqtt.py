@@ -96,7 +96,7 @@ class MqttBridge:
         self.cfg = cfg
         self.db = db  # used to serve baby/remote/history/request
         self._client: aiomqtt.Client | None = None
-        self.on_event = None    # async (event_type, subtype, note, source) -> None
+        self.on_event = None    # async (event_type, subtype, note, source, logged_at=None, value=None, value_unit=None) -> None
         self.on_connect = None  # async () -> None, called once per (re)connect
 
     @property
@@ -152,8 +152,15 @@ class MqttBridge:
         else:  # EVENT_TOPIC
             et = data.get("event_type")
             if et:
+                # Forward the optional logged_at (backfill time for events logged
+                # while a client was offline) + numeric value/value_unit. All
+                # additive + optional: a client that omits them still gets now()
+                # and no value, so existing publishers (device, HA buttons) are
+                # unchanged. create_event/ingest_and_broadcast already accept them.
                 await self.on_event(et, data.get("event_subtype") or None,
-                                    data.get("note"), "mqtt")
+                                    data.get("note"), "mqtt",
+                                    data.get("logged_at"),
+                                    data.get("value"), data.get("value_unit"))
 
     async def handle_history_request(self, data: dict) -> None:
         """Reply to a Baby Remote backfill request on baby/remote/history/replay.

@@ -1,5 +1,16 @@
 # Changelog
 
+## 2026.4.11 - 2026-07-22
+
+- **added: the MQTT `baby/remote/event` handler now honors an optional
+  `logged_at`, `value` and `value_unit`.** A client (e.g. the Baby Remote
+  companion app) can now backfill an event it logged *while offline* at its real
+  time, and carry a numeric reading (temperature/weight/…) over MQTT — previously
+  only the REST API accepted these, so an offline event synced over MQTT got the
+  reconnect time and dropped its value. Fully **additive and backward-compatible**:
+  a payload that omits the fields behaves exactly as before (`now()`, no value),
+  so the ESP32 remote, HA buttons and every existing publisher are unaffected.
+
 ## 2026.4.10 - 2026-07-13
 
 - **fixed: "Last Feed" / "Last Diaper" entities are now timestamps**
