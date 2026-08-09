@@ -11,6 +11,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import datetime as dt
+import json
 import logging
 import uuid
 from pathlib import Path
@@ -21,7 +22,7 @@ from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from . import assessment, ingest, llm, summary, supplies
+from . import assessment, i18n, ingest, llm, summary, supplies
 from .config import Config
 from .db import Database, EXPORT_TABLES
 from .mqtt import MqttBridge
@@ -370,7 +371,8 @@ def create_app(cfg: Config | None = None) -> FastAPI:
         system = cfg.measurement_system if cfg.measurement_system in ("imperial", "metric") else "imperial"
         return {"default_tab": tab, "fever_threshold_c": cfg.fever_threshold_c,
                 "measurement_system": system, "summary_enabled": cfg.summary_enabled,
-                "timezone": cfg.timezone, "addon_slug": await addon_slug()}
+                "timezone": cfg.timezone, "language": cfg.language,
+                "addon_slug": await addon_slug()}
 
     # --- AI daily summary (SDD-003) ---------------------------------------
     @app.get("/api/summary")
@@ -494,6 +496,118 @@ def create_app(cfg: Config | None = None) -> FastAPI:
     async def reset_checklist():
         await db.reset_checklist()
         return {"ok": True}
+
+    # --- Translation editor (SDD-004 §3.9) --------------------------------
+    # Overrides live in <data_dir>/i18n/, NOT in the image, so a contributor's
+    # edits survive an add-on update. Both the SPA and the device path read the
+    # merged catalog, so fixing an overlong OLED string here reaches the remote
+    # on its next refresh with no rebuild.
+
+    def _known_keys() -> set[str]:
+        return {k for k in i18n.shipped("en") if not k.startswith("_")}
+
+    def _validate(overrides: dict) -> tuple[dict, JSONResponse | None]:
+        """Server-side gate. The browser's counter is a convenience; this is
+        the guarantee."""
+        known = _known_keys()
+        clean = {}
+        for key, val in (overrides or {}).items():
+            if key not in known:
+                return {}, JSONResponse(
+                    {"ok": False, "error": "unknown_key", "key": key},
+                    status_code=400)
+            if not isinstance(val, str):
+                return {}, JSONResponse(
+                    {"ok": False, "error": "not_a_string", "key": key},
+                    status_code=400)
+            if key.startswith("device."):
+                folded = i18n._tidy(i18n.ascii_fold(val))
+                if not folded.isascii() or len(folded) > i18n.DEVICE_MAX:
+                    return {}, JSONResponse(
+                        {"ok": False, "error": "device_too_long", "key": key,
+                         "length": len(folded), "max": i18n.DEVICE_MAX},
+                        status_code=400)
+            clean[key] = val
+        return clean, None
+
+    def _override_path(lang: str) -> Path:
+        d = i18n.override_dir(cfg.data_dir)
+        d.mkdir(parents=True, exist_ok=True)
+        return d / f"{lang}.json"
+
+    @app.get("/api/i18n/catalog")
+    async def i18n_catalog(lang: str = "en"):
+        if lang not in i18n.available():
+            return JSONResponse({"ok": False, "error": "unknown_language"}, status_code=400)
+        en = i18n.shipped("en")
+        ship = i18n.shipped(lang)
+        over = i18n.overrides(lang, cfg.data_dir)
+        rows = []
+        for key in en:
+            if key.startswith("_"):
+                continue
+            rows.append({
+                "key": key,
+                "en": en[key],
+                "shipped": ship.get(key),
+                "override": over.get(key),
+                "effective": over.get(key, ship.get(key, en[key])),
+                "is_device": key.startswith("device."),
+                "limit": i18n.DEVICE_MAX if key.startswith("device.") else None,
+            })
+        return {"lang": lang, "entry": i18n.entry(lang), "rows": rows,
+                "registry": i18n.registry()}
+
+    @app.put("/api/i18n/{lang}")
+    async def i18n_save(lang: str, body: dict = Body(...)):
+        if lang not in i18n.available():
+            return JSONResponse({"ok": False, "error": "unknown_language"}, status_code=400)
+        clean, err = _validate(body.get("overrides") or {})
+        if err is not None:
+            return err
+        path = _override_path(lang)
+        if clean:
+            path.write_text(json.dumps(clean, ensure_ascii=False, indent=2),
+                            encoding="utf-8")
+        elif path.exists():
+            path.unlink()
+        i18n.invalidate()
+        with contextlib.suppress(Exception):
+            await reminders.refresh_display()
+        return {"ok": True, "saved": len(clean)}
+
+    @app.delete("/api/i18n/{lang}")
+    async def i18n_revert(lang: str, key: str | None = None):
+        if lang not in i18n.available():
+            return JSONResponse({"ok": False, "error": "unknown_language"}, status_code=400)
+        path = _override_path(lang)
+        if key:
+            current = i18n.overrides(lang, cfg.data_dir)
+            current.pop(key, None)
+            if current:
+                path.write_text(json.dumps(current, ensure_ascii=False, indent=2),
+                                encoding="utf-8")
+            elif path.exists():
+                path.unlink()
+        elif path.exists():
+            path.unlink()
+        i18n.invalidate()
+        with contextlib.suppress(Exception):
+            await reminders.refresh_display()
+        return {"ok": True}
+
+    @app.get("/api/i18n/{lang}/export")
+    async def i18n_export(lang: str):
+        """A complete catalog, shaped exactly like the files in web/i18n/, so it
+        can be dropped into the repo or attached to an issue as-is."""
+        if lang not in i18n.available():
+            return JSONResponse({"ok": False, "error": "unknown_language"}, status_code=400)
+        data = dict(i18n.shipped(lang) or i18n.shipped("en"))
+        data.update(i18n.overrides(lang, cfg.data_dir))
+        return JSONResponse(
+            data,
+            headers={"Content-Disposition": f'attachment; filename="{lang}.json"'},
+        )
 
     if WEB_DIR.is_dir():
         app.mount("/", NoCacheStaticFiles(directory=str(WEB_DIR), html=True), name="web")

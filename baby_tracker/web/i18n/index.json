@@ -1,0 +1,6 @@
+[
+  { "code": "en", "name": "English",    "english_name": "English", "flag": "🇬🇧", "status": "source",  "credit": "" },
+  { "code": "nl", "name": "Nederlands", "english_name": "Dutch",   "flag": "🇳🇱", "status": "machine", "credit": "@mkampstra" },
+  { "code": "es", "name": "Español",    "english_name": "Spanish", "flag": "🇪🇸", "status": "machine", "credit": "" },
+  { "code": "fr", "name": "Français",   "english_name": "French",  "flag": "🇫🇷", "status": "machine", "credit": "" }
+]

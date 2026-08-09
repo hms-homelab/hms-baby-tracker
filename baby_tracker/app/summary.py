@@ -12,7 +12,7 @@ import datetime as dt
 import logging
 from zoneinfo import ZoneInfo
 
-from . import llm
+from . import display, i18n, llm
 from .stats import compute
 
 log = logging.getLogger("baby.summary")
@@ -186,7 +186,18 @@ def render_digest(d: dict) -> str:
 
 
 def build_prompt(cfg, digest: dict) -> str:
-    return f"{cfg.summary_prompt}\n\nRecent activity:\n{render_digest(digest)}"
+    """The instruction, the (optional) output-language line, then the digest.
+
+    The language line is APPENDED, never substituted, so the configured prompt
+    body survives untouched — including its "do not use em-dashes" instruction,
+    which measurably changes the output. English appends nothing at all, so a
+    default install sends a byte-identical prompt to the pre-i18n releases.
+    """
+    prompt = cfg.summary_prompt
+    lang = display.device_lang(cfg)
+    if lang != "en":
+        prompt = f"{prompt}\nRespond in {i18n.english_name(lang)}."
+    return f"{prompt}\n\nRecent activity:\n{render_digest(digest)}"
 
 
 async def generate(db, cfg, mqtt=None, install_token: str | None = None,

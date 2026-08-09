@@ -31,6 +31,7 @@ options:
   checklist_reset_hour: 0
   fever_threshold_c: 38.0
   measurement_system: imperial
+  language: auto
   summary_enabled: false
   summary_provider: hosted
   summary_hour: 6
@@ -65,6 +66,12 @@ schema:
   fever_threshold_c: float
   # Default UI units: imperial (°F, lb/oz, in) or metric (°C, kg, cm).
   measurement_system: list(imperial|metric)
+  # UI + Baby Remote language. "auto" lets each browser follow its own language;
+  # a code (en|nl|es|fr) forces it. This option is ALSO the only control for the
+  # Baby Remote's OLED text, which is built server-side, so a per-browser pick in
+  # the web UI does not move it. Under "auto" the device shows English.
+  # Translations can be edited in-app: language menu -> Edit translations.
+  language: list(auto|en|nl|es|fr)
   # AI daily summaries: a warm plain-language recap of the day, shown in the
   # summary card. Sends only an ANONYMIZED digest (counts/trends, never names or
   # notes). Provider: hosted proxy, your own Ollama, or a Claude/Gemini/OpenAI key.

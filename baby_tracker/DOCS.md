@@ -38,6 +38,7 @@ automations. Stats are exposed back to Home Assistant as native entities.
 | `checklist_reset_hour` | int (0-23) | `0`               | Local hour to auto-uncheck the Get Ready checklist each morning. `0` = off (the default, since the seeded items are mostly one-time prep). |
 | `fever_threshold_c` | float        | `38.0`             | A logged temperature at/above this (in °C) is flagged as a fever in the Health tab. °F entries are converted before comparing. |
 | `measurement_system` | list        | `imperial`         | Default unit pickers in the UI: `imperial` (°F, lb/oz, in) or `metric` (°C, kg, cm). The unit is stored per entry, so this only changes the defaults. |
+| `language`       | list            | `auto`             | UI + Baby Remote language (`auto`, `en`, `nl`, `es`, `fr`). `auto` lets **each browser** follow its own language. **This option is also the only control for the Baby Remote's OLED text**, which is built server-side: the in-app picker cannot move it, because one remote serves the whole household. Under `auto` the device shows English. See [Languages](#languages). |
 | `summary_enabled` | bool          | `false`            | The AI daily summary in the summary card. **Off by default (opt-in)** — turn it on to get a warm plain-language recap. When enabled it sends only a de-identified digest (counts/trends, never names or notes) to the chosen provider (hosted proxy by default). |
 | `summary_provider` | list         | `hosted`           | LLM backend: `hosted` proxy (default, `babytracker.shmaestro.com`), your own `ollama`, or `anthropic` / `openai` / `gemini`. |
 | `summary_hour` | int (0-23)       | `6`                | Local hour for the automatic daily digest. `0` = on-demand only. |
@@ -73,6 +74,68 @@ timezone: America/New_York
 pump_hours: 2.5
 database_url: ""
 ```
+
+## Languages
+
+The web UI ships in **English, Dutch, Spanish and French**. Pick one from the
+**flag button in the header**, which is per browser, so two parents sharing one
+install can each read their own language on their own phone.
+
+The first entry, **Automatic**, follows the `language` option, or the browser's
+own language when that is `auto`.
+
+**The picker moves the web UI only.** The Baby Remote's OLED text is built on the
+server, because one remote serves the whole household and cannot follow two
+phones at once. Set the `language` **option** to translate the device.
+
+### Editing translations, no code needed
+
+Language menu → **Edit translations…**. Every string in the app is listed with
+its English source, grouped by the part of the app it belongs to. Edit what reads
+wrong, press **Save**, and the UI updates immediately.
+
+- Edits are stored in `/data`, so they **survive add-on updates**.
+- **Revert to shipped** throws your edits away and goes back to the bundled
+  translation.
+
+Everything happens in the browser. You never need SSH, Samba, or a file manager,
+and you never touch `/data` yourself.
+
+### Sending your translation back
+
+Press **Export JSON**. Your browser downloads one file, `nl.json` (or `es`/`fr`),
+the same way the *Back up data* button works. Then either:
+
+- **Paste it into a comment** on
+  [issue #9](https://github.com/hms-homelab/hms-baby-tracker/issues/9),
+  wrapped in triple backticks. This always works and needs no GitHub account
+  beyond a free one.
+- **Attach the file** to that comment. GitHub refuses `.json` uploads, so rename
+  it to `nl.json.txt` or zip it first.
+- Or open a pull request adding the file to `baby_tracker/web/i18n/`, if you are
+  comfortable with that.
+
+We will commit it and ship it to everyone in the next release, with credit.
+
+Placeholders like `{ago}` and `{name}` are highlighted. Keep them in your
+translation, or that value will not appear.
+
+### The `Baby Remote` group is special
+
+Those dozen strings are drawn on the remote's little OLED, which has an
+**ASCII-only font and a 21-character row**. Accented characters are folded
+automatically (`é` becomes `e`), but a string that is still too long **cannot be
+saved**: the editor shows a live `n/21` counter and blocks Save, because the
+firmware would silently cut the end off mid-word instead of wrapping. If a
+translation does not fit, the remote falls back to English for that line only;
+the web UI still shows your full text.
+
+### Translation status
+
+Dutch, Spanish and French shipped as a **machine first pass** and are marked
+`machine` in the picker and the editor. They have not been checked by a native
+speaker yet, so corrections are very welcome. The `Baby Remote` strings were
+hand-checked before release.
 
 ## MQTT topics
 

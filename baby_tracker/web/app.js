@@ -18,65 +18,68 @@
     contraction: "⏱️", supply: "🧴",
   };
 
-  // --- Baby button definitions: [label, color, {event_type, event_subtype?}, emoji, light?] ---
+  // --- Baby button definitions: [i18n key, color, {event_type, event_subtype?}, emoji, light?] ---
+  // Position 0 is a CATALOG KEY, not a label. The single render site (makeTile)
+  // resolves it with t(), so adding a language never touches this table.
   var GROUPS = {
     "grp-feed": [
-      ["Breast", "#e8a0bf", { event_type: "feed", event_subtype: "breast" }, "🤱"],
-      ["Bottle", "#a0c4e8", { event_type: "feed", event_subtype: "bottle" }, "🍼"],
-      ["Solid", "#c4e8a0", { event_type: "feed", event_subtype: "solid" }, "🍎"],
+      ["btn.breast", "#e8a0bf", { event_type: "feed", event_subtype: "breast" }, "🤱"],
+      ["btn.bottle", "#a0c4e8", { event_type: "feed", event_subtype: "bottle" }, "🍼"],
+      ["btn.solid", "#c4e8a0", { event_type: "feed", event_subtype: "solid" }, "🍎"],
     ],
     "grp-pump": [
-      ["Pump L", "#d4a0e8", { event_type: "pump", event_subtype: "left" }, "🫙"],
-      ["Pump R", "#d4a0e8", { event_type: "pump", event_subtype: "right" }, "🫙"],
+      ["btn.pumpL", "#d4a0e8", { event_type: "pump", event_subtype: "left" }, "🫙"],
+      ["btn.pumpR", "#d4a0e8", { event_type: "pump", event_subtype: "right" }, "🫙"],
     ],
     "grp-diaper": [
-      ["Pee", "#f0e68c", { event_type: "diaper", event_subtype: "pee" }, "💧"],
-      ["Poop", "#d2a679", { event_type: "diaper", event_subtype: "poop" }, "💩"],
-      ["Both", "#e8c8a0", { event_type: "diaper", event_subtype: "both" }, "✅"],
-      ["Change", "#c8b89a", { event_type: "diaper", event_subtype: "change" }, "🩲"],
+      ["btn.pee", "#f0e68c", { event_type: "diaper", event_subtype: "pee" }, "💧"],
+      ["btn.poop", "#d2a679", { event_type: "diaper", event_subtype: "poop" }, "💩"],
+      ["btn.both", "#e8c8a0", { event_type: "diaper", event_subtype: "both" }, "✅"],
+      ["btn.change", "#c8b89a", { event_type: "diaper", event_subtype: "change" }, "🩲"],
     ],
     "grp-other": [
-      ["Sleep Start", "#b0a0e8", { event_type: "sleep", event_subtype: "start" }, "😴", true],
-      ["Sleep End", "#9a86d4", { event_type: "sleep", event_subtype: "end" }, "⏰", true],
-      ["Bath", "#a0d8e8", { event_type: "bath" }, "🛁"],
-      ["Medicine", "#e8a0a0", { event_type: "medicine" }, "💊"],
-      ["Tummy", "#a0e8c4", { event_type: "tummy_time" }, "🤸"],
+      ["btn.sleepStart", "#b0a0e8", { event_type: "sleep", event_subtype: "start" }, "😴", true],
+      ["btn.sleepEnd", "#9a86d4", { event_type: "sleep", event_subtype: "end" }, "⏰", true],
+      ["btn.bath", "#a0d8e8", { event_type: "bath" }, "🛁"],
+      ["btn.medicine", "#e8a0a0", { event_type: "medicine" }, "💊"],
+      ["btn.tummy", "#a0e8c4", { event_type: "tummy_time" }, "🤸"],
     ],
   };
 
-  // Contractions tab: three big severity buttons. [label, subtype, color, emoji]
+  // Contractions tab: three big severity buttons. [i18n key, subtype, color, emoji]
   var CONTRACTIONS = [
-    ["Mild", "mild", "#7bc47f", "🟢"],
-    ["Medium", "medium", "#e8a84e", "🟠"],
-    ["Intense", "intense", "#e06b6b", "🔴"],
+    ["ctx.mild", "mild", "#7bc47f", "🟢"],
+    ["ctx.medium", "medium", "#e8a84e", "🟠"],
+    ["ctx.intense", "intense", "#e06b6b", "🔴"],
   ];
 
   var SUPPLY_CATEGORIES = ["formula", "diapers", "wipes", "cream", "other"];
 
-  // Growth tab metrics. [event_type, label, [metric_unit, imperial_unit]]
+  // Growth tab metrics. [event_type, i18n key, [metric_unit, imperial_unit], emoji]
   var GROWTH_METRICS = [
-    ["weight", "⚖️ Weight", ["kg", "lb"]],
-    ["length", "📏 Length", ["cm", "in"]],
-    ["head_circumference", "🧢 Head", ["cm", "in"]],
+    ["weight", "growth.weight", ["kg", "lb"], "⚖️"],
+    ["length", "growth.length", ["cm", "in"], "📏"],
+    ["head_circumference", "growth.head", ["cm", "in"], "🧢"],
   ];
 
-  // Which event a supply auto-counts down on. [label, type, subtype?]
+  // Which event a supply auto-counts down on. [i18n key, type, subtype?]
   var CONSUME_OPTIONS = [
-    ["Bottle feed", "feed", "bottle"],
-    ["Any feed", "feed", null],
-    ["Diaper (any)", "diaper", null],
-    ["Pump", "pump", null],
-    ["Bath", "bath", null],
+    ["consume.bottleFeed", "feed", "bottle"],
+    ["consume.anyFeed", "feed", null],
+    ["consume.anyDiaper", "diaper", null],
+    ["consume.pump", "pump", null],
+    ["consume.bath", "bath", null],
   ];
 
-  // Flattened Baby type list for the manual-entry dropdown (label + payload).
+  // Flattened Baby type list for the manual-entry dropdown (key + payload).
+  // Labels are resolved at build time so a language switch rebuilds them.
   var EVENT_OPTIONS = [];
   Object.keys(GROUPS).forEach(function (gid) {
     GROUPS[gid].forEach(function (def) {
-      EVENT_OPTIONS.push({ label: def[3] + " " + def[0], payload: def[2] });
+      EVENT_OPTIONS.push({ key: def[0], emoji: def[3], payload: def[2] });
     });
   });
-  EVENT_OPTIONS.push({ label: "📝 Note", payload: { event_type: "note" } });
+  EVENT_OPTIONS.push({ key: "opt.note", emoji: "📝", payload: { event_type: "note" } });
 
   var statusEl = document.getElementById("status");
   var pollTimer = null;
@@ -180,11 +183,13 @@
   // convention used elsewhere for durations, e.g. sleep_total_today).
   function fmtAgo(min) {
     if (min === null || min === undefined) return "—";
-    if (min < 60) return min + "m";
+    if (min < 60) return min + t("unit.m");
     var hrs = Math.floor(min / 60), rem = min % 60;
-    return hrs + "h" + (rem ? " " + rem + "m" : "");
+    return hrs + t("unit.h") + (rem ? " " + rem + t("unit.m") : "");
   }
-  function fmtAgoSuffix(min) { return (min === null || min === undefined) ? "" : " ago"; }
+  function fmtAgoSuffix(min) {
+    return (min === null || min === undefined) ? "" : " " + t("time.ago");
+  }
   function fmtType(t) { return t ? " (" + t + ")" : ""; }
 
   // Any auxiliary stat (pumps, baths, contractions, temp, ...) can be tapped
@@ -209,7 +214,7 @@
   function statCard(item) {
     var el = document.createElement("div");
     el.className = "stat clickable";
-    el.title = "Tap to unpin";
+    el.title = t("stat.unpin");
     el.addEventListener("click", function () { togglePinned(item.key); });
     var ico = document.createElement("div");
     ico.className = "stat-ico";
@@ -233,7 +238,7 @@
   function statChip(item) {
     var chip = document.createElement("span");
     chip.className = "chip" + (item.warn ? " warn" : "");
-    chip.title = "Tap to pin";
+    chip.title = t("stat.pin");
     chip.addEventListener("click", function () { togglePinned(item.key); });
     chip.appendChild(document.createTextNode(item.icon + " " + item.label + " "));
     var b = document.createElement("b");
@@ -266,11 +271,11 @@
     document.getElementById("sum-feed-val").textContent =
       fmtAgo(stats.last_feed_min) + fmtAgoSuffix(stats.last_feed_min);
     document.getElementById("sum-feed-sub").textContent =
-      (stats.last_feed_type ? stats.last_feed_type + " · " : "") + "Today: " + stats.feeds_today;
+      (stats.last_feed_type ? stats.last_feed_type + " · " : "") + t("sum.today", { n: stats.feeds_today });
     document.getElementById("sum-diaper-val").textContent =
       fmtAgo(stats.last_diaper_min) + fmtAgoSuffix(stats.last_diaper_min);
     document.getElementById("sum-diaper-sub").textContent =
-      (stats.last_diaper_type ? stats.last_diaper_type + " · " : "") + "Today: " + stats.diapers_today;
+      (stats.last_diaper_type ? stats.last_diaper_type + " · " : "") + t("sum.today", { n: stats.diapers_today });
 
     // Sleep: state (asleep/awake) + how long that state has lasted, computed
     // from the most recent sleep start/end in the journal (entries are
@@ -281,9 +286,11 @@
     }
     var sinceMin = lastSleep ? Math.round((now - new Date(lastSleep.logged_at).getTime()) / 60000) : null;
     document.getElementById("sum-sleep-ico").textContent = stats.is_sleeping ? "😴" : "🌙";
-    document.getElementById("sum-sleep-label").textContent = stats.is_sleeping ? "Asleep" : "Awake";
+    document.getElementById("sum-sleep-label").textContent =
+      stats.is_sleeping ? t("sum.asleep") : t("sum.awake");
     document.getElementById("sum-sleep-val").textContent = sinceMin === null ? "—" : fmtAgo(sinceMin);
-    document.getElementById("sum-sleep-sub").textContent = "Slept " + stats.sleep_total_today + " today";
+    document.getElementById("sum-sleep-sub").textContent =
+      t("sum.slept", { total: stats.sleep_total_today });
 
     // Contractions / Get Ready / Health / Growth roll-up
     var win = 2 * 3600 * 1000;
@@ -306,23 +313,23 @@
     var wStr = lastWeight ? fmtMeasure(lastWeight.value, lastWeight.value_unit) : "—";
 
     renderAuxStats([
-      { key: "pumps", icon: "🫙", label: "Pumps", value: stats.pumps_today, accent: "#B19CD9" },
-      { key: "baths", icon: "🛁", label: "Baths", value: stats.baths_today, accent: "#6FD1D1" },
-      { key: "meds", icon: "💊", label: "Meds", value: stats.medicines_today, accent: "#E06B6B" },
-      { key: "tummy", icon: "🤸", label: "Tummy", value: stats.tummy_times_today, accent: "#5BD6A0" },
-      { key: "contractions", icon: "⏱️", label: "Contractions",
-        value: ctxToday + (ctx2h ? " (" + ctx2h + " in 2h)" : ""), accent: "#E06B6B" },
-      { key: "ready", icon: "🎒", label: "Ready", value: cl.done + "/" + cl.total, accent: "#9A86D4" },
-      { key: "temp", icon: "🌡️", label: "Temp", value: tempStr, warn: fever, accent: "#E8A84E" },
-      { key: "weight", icon: "📈", label: "Weight", value: wStr, accent: "#6FB1C9" },
+      { key: "pumps", icon: "🫙", label: t("stat.pumps"), value: stats.pumps_today, accent: "#B19CD9" },
+      { key: "baths", icon: "🛁", label: t("stat.baths"), value: stats.baths_today, accent: "#6FD1D1" },
+      { key: "meds", icon: "💊", label: t("stat.meds"), value: stats.medicines_today, accent: "#E06B6B" },
+      { key: "tummy", icon: "🤸", label: t("stat.tummy"), value: stats.tummy_times_today, accent: "#5BD6A0" },
+      { key: "contractions", icon: "⏱️", label: t("stat.contractions"),
+        value: ctxToday + (ctx2h ? " " + t("stat.ctx2h", { n: ctx2h }) : ""), accent: "#E06B6B" },
+      { key: "ready", icon: "🎒", label: t("stat.ready"), value: cl.done + "/" + cl.total, accent: "#9A86D4" },
+      { key: "temp", icon: "🌡️", label: t("stat.temp"), value: tempStr, warn: fever, accent: "#E8A84E" },
+      { key: "weight", icon: "📈", label: t("stat.weight"), value: wStr, accent: "#6FB1C9" },
     ]);
 
     // Notifications / alerts strip (fever + supply low/refill-due)
     var sup = extras.supplies || { low: [], due: [] };
     var alerts = [];
-    if (fever) alerts.push("⚠ Fever");
-    if (sup.low && sup.low.length) alerts.push("🧴 Low: " + sup.low.join(", "));
-    if (sup.due && sup.due.length) alerts.push("🔔 Refill: " + sup.due.join(", "));
+    if (fever) alerts.push("⚠ " + t("alert.fever"));
+    if (sup.low && sup.low.length) alerts.push("🧴 " + t("alert.low", { names: sup.low.join(", ") }));
+    if (sup.due && sup.due.length) alerts.push("🔔 " + t("alert.refill", { names: sup.due.join(", ") }));
     var aEl = document.getElementById("sum-alert");
     if (alerts.length) { aEl.textContent = alerts.join("   ·   "); aEl.hidden = false; }
     else { aEl.textContent = ""; aEl.hidden = true; }
@@ -346,36 +353,36 @@
   function journalLabel(e) {
     var type = e.event_type, sub = e.event_subtype;
     if (type === "diaper") {
-      if (sub === "change") return "🩲 Diaper change";
-      if (sub === "both") return "🧷 Pee+Poop";
-      if (sub === "pee") return "💧 Pee";
-      if (sub === "poop") return "💩 Poop";
-      return "🧷 Diaper" + fmtType(sub);
+      if (sub === "change") return "🩲 " + t("journal.diaperChange");
+      if (sub === "both") return "🧷 " + t("journal.peePoop");
+      if (sub === "pee") return "💧 " + t("journal.pee");
+      if (sub === "poop") return "💩 " + t("journal.poop");
+      return "🧷 " + t("journal.diaper") + fmtType(sub);
     }
     if (type === "sleep") {
-      if (sub === "start") return "😴 Sleep start";
-      if (sub === "end") return "⏰ Sleep end";
-      return "😴 Sleep" + fmtType(sub);
+      if (sub === "start") return "😴 " + t("journal.sleepStart");
+      if (sub === "end") return "⏰ " + t("journal.sleepEnd");
+      return "😴 " + t("journal.sleep") + fmtType(sub);
     }
     if (type === "pump") {
-      if (sub === "left") return "🫙 Pump L";
-      if (sub === "right") return "🫙 Pump R";
-      return "🫙 Pump" + fmtType(sub);
+      if (sub === "left") return "🫙 " + t("journal.pumpL");
+      if (sub === "right") return "🫙 " + t("journal.pumpR");
+      return "🫙 " + t("journal.pump") + fmtType(sub);
     }
     if (type === "feed") {
-      if (sub === "breast") return "🤱 Breast feed";
-      if (sub === "bottle") return "🍼 Bottle feed";
-      if (sub === "solid") return "🍎 Solid food";
-      return "🍼 Feed" + fmtType(sub);
+      if (sub === "breast") return "🤱 " + t("journal.breastFeed");
+      if (sub === "bottle") return "🍼 " + t("journal.bottleFeed");
+      if (sub === "solid") return "🍎 " + t("journal.solidFood");
+      return "🍼 " + t("journal.feed") + fmtType(sub);
     }
-    if (type === "contraction") return "⏱️ Contraction" + fmtType(sub);
-    if (type === "supply") return "🧴 Supply" + fmtType(sub);
-    if (type === "temperature") return "🌡️ Temperature" + fmtValue(e.value, e.value_unit);
-    if (type === "weight") return "⚖️ Weight " + fmtMeasure(e.value, e.value_unit);
-    if (type === "length") return "📏 Length" + fmtValue(e.value, e.value_unit);
-    if (type === "head_circumference") return "🧢 Head" + fmtValue(e.value, e.value_unit);
-    if (type === "symptom") return "🤒 Symptom";
-    if (type === "note") return "📝 Note";
+    if (type === "contraction") return "⏱️ " + t("journal.contraction") + fmtType(sub);
+    if (type === "supply") return "🧴 " + t("journal.supply") + fmtType(sub);
+    if (type === "temperature") return "🌡️ " + t("journal.temperature") + fmtValue(e.value, e.value_unit);
+    if (type === "weight") return "⚖️ " + t("journal.weight") + " " + fmtMeasure(e.value, e.value_unit);
+    if (type === "length") return "📏 " + t("journal.length") + fmtValue(e.value, e.value_unit);
+    if (type === "head_circumference") return "🧢 " + t("journal.head") + fmtValue(e.value, e.value_unit);
+    if (type === "symptom") return "🤒 " + t("journal.symptom");
+    if (type === "note") return "📝 " + t("journal.note");
     var icon = ICONS[type] || "📝";
     var display = type.replace(/_/g, " ");
     display = display.charAt(0).toUpperCase() + display.slice(1);
@@ -388,7 +395,7 @@
     if (!entries || !entries.length) {
       var empty = document.createElement("li");
       empty.className = "journal-empty";
-      empty.textContent = "No events yet.";
+      empty.textContent = t("journal.empty");
       ul.appendChild(empty);
       return;
     }
@@ -447,33 +454,33 @@
     var note = document.createElement("input");
     note.type = "text";
     note.className = "j-note-edit";
-    note.placeholder = "Note (optional)";
+    note.placeholder = t("manual.notePlaceholder");
     note.value = entry.note || "";
 
     var save = document.createElement("button");
     save.className = "j-save";
-    save.textContent = "Save";
+    save.textContent = t("journal.save");
     save.addEventListener("click", function () {
       var iso = localInputToIso(time.value);
-      if (!iso) { setStatus("Invalid date/time", true); return; }
+      if (!iso) { setStatus(t("err.invalidDateTime"), true); return; }
       apiPatch("api/event/" + entry.id, { logged_at: iso, note: note.value.trim() })
-        .then(function () { editingId = null; setStatus("Updated ✓"); return refresh(); })
-        .catch(function (err) { setStatus("Failed (" + err.message + ")", true); });
+        .then(function () { editingId = null; setStatus(t("status.updated")); return refresh(); })
+        .catch(function (err) { setStatus(t("err.failed", { msg: err.message }), true); });
     });
 
     var del = document.createElement("button");
     del.className = "j-del";
-    del.textContent = "Delete";
+    del.textContent = t("journal.delete");
     del.addEventListener("click", function () {
-      if (!window.confirm("Delete this event?")) return;
+      if (!window.confirm(t("confirm.deleteEvent"))) return;
       apiDelete("api/event/" + entry.id)
-        .then(function () { editingId = null; setStatus("Deleted ✓"); return refresh(); })
-        .catch(function (err) { setStatus("Failed (" + err.message + ")", true); });
+        .then(function () { editingId = null; setStatus(t("status.deleted")); return refresh(); })
+        .catch(function (err) { setStatus(t("err.failed", { msg: err.message }), true); });
     });
 
     var cancel = document.createElement("button");
     cancel.className = "j-cancel";
-    cancel.textContent = "Cancel";
+    cancel.textContent = t("journal.cancel");
     cancel.addEventListener("click", function () {
       editingId = null; li.classList.remove("open"); box.remove(); refresh();
     });
@@ -494,7 +501,7 @@
       var t = new Date(e.logged_at).getTime();
       return !isNaN(t) && now - t <= win;
     });
-    if (!recent.length) { el.textContent = "No contractions in the last 2h."; return; }
+    if (!recent.length) { el.textContent = t("ctx.none2h"); return; }
     // entries are most-recent-first
     var lastMin = Math.round((now - new Date(recent[0].logged_at).getTime()) / 60000);
     var gap = "";
@@ -504,9 +511,10 @@
         diffs.push(new Date(recent[i].logged_at).getTime() - new Date(recent[i + 1].logged_at).getTime());
       }
       var avg = diffs.reduce(function (a, b) { return a + b; }, 0) / diffs.length;
-      gap = " · avg gap " + Math.round(avg / 60000) + " min";
+      gap = t("ctx.avgGap", { n: Math.round(avg / 60000) });
     }
-    el.textContent = recent.length + " in last 2h · last " + fmtAgo(lastMin) + " ago" + gap;
+    el.textContent = t("ctx.recent",
+      { n: recent.length, ago: fmtAgo(lastMin) }, recent.length) + gap;
   }
 
   // --- AI daily summary ---------------------------------------------------
@@ -529,16 +537,16 @@
     var meta = document.getElementById("ai-meta");
     if (data.latest && data.latest.text) {
       txt.textContent = "🤖 " + data.latest.text;
-      meta.textContent = "generated " + fmtClock(data.latest.generated_at)
-        + " · " + data.used_today + "/" + data.cap + " today";
+      meta.textContent = t("ai.generated", { time: fmtClock(data.latest.generated_at) })
+        + " · " + t("ai.usage", { used: data.used_today, cap: data.cap });
     } else {
-      txt.textContent = "🤖 No summary yet today.";
-      meta.textContent = data.used_today + "/" + data.cap + " today";
+      txt.textContent = "🤖 " + t("ai.noSummary");
+      meta.textContent = t("ai.usage", { used: data.used_today, cap: data.cap });
     }
     if (!generatingSummary) {
       var btn = document.getElementById("ai-generate");
       btn.disabled = !data.can_generate;
-      btn.textContent = data.can_generate ? "Summarize now" : "Cap reached";
+      btn.textContent = data.can_generate ? t("ai.generate") : t("ai.capReached");
     }
     // First-run privacy notice (once per device)
     var seen = true;
@@ -548,13 +556,13 @@
   function generateSummary() {
     var btn = document.getElementById("ai-generate");
     generatingSummary = true;
-    btn.disabled = true; btn.textContent = "Thinking…";
+    btn.disabled = true; btn.textContent = t("ai.thinking");
     apiPost("api/summary", {})
-      .then(function () { generatingSummary = false; setStatus("Summary ready ✓"); return loadSummary(); })
+      .then(function () { generatingSummary = false; setStatus(t("status.summaryReady")); return loadSummary(); })
       .catch(function (err) {
         generatingSummary = false;
         setStatus(err.message.indexOf("429") >= 0
-          ? "Daily summary cap reached" : "Summary failed (" + err.message + ")", true);
+          ? t("err.capReached") : t("err.summaryFailed", { msg: err.message }), true);
         return loadSummary();
       });
   }
@@ -566,7 +574,7 @@
     });
     document.getElementById("ai-config-link").addEventListener("click", function (e) {
       e.preventDefault();
-      if (!addonSlug) { setStatus("Open Settings → the add-on → Configuration"); return; }
+      if (!addonSlug) { setStatus(t("ai.openSettings")); return; }
       // The Ingress iframe is same-origin with HA; navigate the parent frame to
       // the add-on's Configuration tab.
       var url = "/hassio/addon/" + addonSlug + "/config";
@@ -589,7 +597,7 @@
         if (currentTab === "growth") loadGrowth();
         setStatus("");
       })
-      .catch(function (err) { setStatus("Offline — retrying… (" + err.message + ")", true); });
+      .catch(function (err) { setStatus(t("err.offline", { msg: err.message }), true); });
   }
 
   // --- Baby actions -------------------------------------------------------
@@ -599,8 +607,8 @@
       setTimeout(function () { tileEl.classList.remove("pressed"); }, 150);
     }
     apiPost("api/event", payload)
-      .then(function () { setStatus("Logged ✓"); return refresh(); })
-      .catch(function (err) { setStatus("Failed to log (" + err.message + ")", true); });
+      .then(function () { setStatus(t("status.logged")); return refresh(); })
+      .catch(function (err) { setStatus(t("err.failedLog", { msg: err.message }), true); });
   }
   function addManual() {
     var sel = document.getElementById("manual-type");
@@ -609,7 +617,7 @@
     var timeVal = document.getElementById("manual-time").value;
     var noteVal = (document.getElementById("manual-note").value || "").trim();
     var iso = timeVal ? localInputToIso(timeVal) : null;
-    if (timeVal && !iso) { setStatus("Invalid date/time", true); return; }
+    if (timeVal && !iso) { setStatus(t("err.invalidDateTime"), true); return; }
     var payload = { event_type: opt.payload.event_type };
     if (opt.payload.event_subtype) payload.event_subtype = opt.payload.event_subtype;
     if (noteVal) payload.note = noteVal;
@@ -618,20 +626,20 @@
       .then(function () {
         document.getElementById("manual-note").value = "";
         document.getElementById("manual-time").value = nowLocalInput();
-        setStatus("Added ✓"); return refresh();
+        setStatus(t("status.added")); return refresh();
       })
-      .catch(function (err) { setStatus("Failed to add (" + err.message + ")", true); });
+      .catch(function (err) { setStatus(t("err.failedAdd", { msg: err.message }), true); });
   }
   function resetAll() {
-    if (!window.confirm("Reset ALL events? This cannot be undone.")) return;
+    if (!window.confirm(t("confirm.resetAll"))) return;
     apiPost("api/reset", {})
-      .then(function () { setStatus("Reset done ✓"); return refresh(); })
-      .catch(function (err) { setStatus("Failed to reset (" + err.message + ")", true); });
+      .then(function () { setStatus(t("status.resetDone")); return refresh(); })
+      .catch(function (err) { setStatus(t("err.failedReset", { msg: err.message }), true); });
   }
 
   // --- Backup / restore (issue #5) ---------------------------------------
   function backupData() {
-    setStatus("Preparing backup…");
+    setStatus(t("status.preparingBackup"));
     apiGet("api/export").then(function (data) {
       var blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
       var url = URL.createObjectURL(blob);
@@ -645,25 +653,25 @@
       a.click();
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
-      setStatus("Backup downloaded ✓");
-    }).catch(function (err) { setStatus("Backup failed (" + err.message + ")", true); });
+      setStatus(t("status.backupDownloaded"));
+    }).catch(function (err) { setStatus(t("err.backupFailed", { msg: err.message }), true); });
   }
   function restoreData(file) {
     if (!file) return;
-    if (!window.confirm("Restore from this file? It REPLACES all current data in the add-on.")) return;
+    if (!window.confirm(t("confirm.restore"))) return;
     var reader = new FileReader();
     reader.onload = function () {
       var payload;
       try { payload = JSON.parse(reader.result); }
-      catch (e) { setStatus("That is not a valid JSON backup", true); return; }
+      catch (e) { setStatus(t("err.badBackup"), true); return; }
       apiPost("api/import", payload)
         .then(function (r) {
           var n = r.restored ? (r.restored.baby_events || 0) : 0;
-          setStatus("Restored ✓ (" + n + " events)");
+          setStatus(t("status.restored", { n: n }, n));
           return refresh();
         })
         .then(function () { loadSupplies(); loadChecklist(); })
-        .catch(function (err) { setStatus("Restore failed (" + err.message + ")", true); });
+        .catch(function (err) { setStatus(t("err.restoreFailed", { msg: err.message }), true); });
     };
     reader.readAsText(file);
   }
@@ -674,13 +682,13 @@
     var sub = sel.value;
     var timeVal = document.getElementById("ctx-backfill-time").value;
     var iso = timeVal ? localInputToIso(timeVal) : null;
-    if (!iso) { setStatus("Pick a date/time", true); return; }
+    if (!iso) { setStatus(t("err.pickDateTime"), true); return; }
     apiPost("api/event", { event_type: "contraction", event_subtype: sub, logged_at: iso })
       .then(function () {
         document.getElementById("ctx-backfill-time").value = nowLocalInput();
-        setStatus("Contraction added ✓"); return refresh();
+        setStatus(t("status.contractionAdded")); return refresh();
       })
-      .catch(function (err) { setStatus("Failed (" + err.message + ")", true); });
+      .catch(function (err) { setStatus(t("err.failed", { msg: err.message }), true); });
   }
 
   // --- Supplies -----------------------------------------------------------
@@ -699,7 +707,7 @@
     if (!list.length) {
       var empty = document.createElement("li");
       empty.className = "journal-empty";
-      empty.textContent = "No supplies yet — add one below.";
+      empty.textContent = t("supply.empty");
       ul.appendChild(empty);
       return;
     }
@@ -723,19 +731,19 @@
 
       var badges = document.createElement("div");
       badges.className = "supply-badges";
-      if (s.is_low) { var b1 = document.createElement("span"); b1.className = "badge low"; b1.textContent = "Low"; badges.appendChild(b1); }
-      if (s.is_due) { var b2 = document.createElement("span"); b2.className = "badge due"; b2.textContent = "Refill due"; badges.appendChild(b2); }
+      if (s.is_low) { var b1 = document.createElement("span"); b1.className = "badge low"; b1.textContent = t("supply.low"); badges.appendChild(b1); }
+      if (s.is_due) { var b2 = document.createElement("span"); b2.className = "badge due"; b2.textContent = t("supply.refillDue"); badges.appendChild(b2); }
       if (s.low_threshold != null) { var b3 = document.createElement("span"); b3.className = "badge muted"; b3.textContent = "≤ " + fmtNum(s.low_threshold); badges.appendChild(b3); }
-      if (s.refill_days != null) { var b4 = document.createElement("span"); b4.className = "badge muted"; b4.textContent = "every " + s.refill_days + "d"; badges.appendChild(b4); }
+      if (s.refill_days != null) { var b4 = document.createElement("span"); b4.className = "badge muted"; b4.textContent = t("supply.everyDays", { n: s.refill_days }); badges.appendChild(b4); }
       if (badges.children.length) li.appendChild(badges);
 
       var actions = document.createElement("div");
       actions.className = "supply-actions";
       actions.appendChild(supplyBtn("−", "s-minus", function () { adjustSupply(s.id, -1); }));
       actions.appendChild(supplyBtn("+", "s-plus", function () { adjustSupply(s.id, 1); }));
-      actions.appendChild(supplyBtn("Refill", "s-refill", function () { refillSupply(s); }));
-      actions.appendChild(supplyBtn("Delete", "s-del", function () {
-        if (window.confirm("Delete " + s.name + "?")) {
+      actions.appendChild(supplyBtn(t("supply.refillBtn"), "s-refill", function () { refillSupply(s); }));
+      actions.appendChild(supplyBtn(t("supply.deleteBtn"), "s-del", function () {
+        if (window.confirm(t("confirm.deleteSupply", { name: s.name }))) {
           apiDelete("api/supplies/" + s.id).then(loadSupplies).catch(function () {});
         }
       }));
@@ -752,22 +760,22 @@
   }
   function adjustSupply(id, delta) {
     apiPost("api/supplies/" + id + "/adjust", { delta: delta })
-      .then(loadSupplies).catch(function (err) { setStatus("Failed (" + err.message + ")", true); });
+      .then(loadSupplies).catch(function (err) { setStatus(t("err.failed", { msg: err.message }), true); });
   }
   function refillSupply(s) {
-    var ans = window.prompt("Refill " + s.name + " to how many " + (s.unit || "units") + "?",
+    var ans = window.prompt(t("prompt.refill", { name: s.name, unit: s.unit || t("supply.units") }),
       s.low_threshold != null ? "" : fmtNum(s.quantity));
     if (ans === null) return;
     var body = {};
     var q = parseFloat(ans);
     if (!isNaN(q)) body.quantity = q;
     apiPost("api/supplies/" + s.id + "/refill", body)
-      .then(function () { setStatus("Refilled ✓"); return refresh().then(loadSupplies); })
-      .catch(function (err) { setStatus("Failed (" + err.message + ")", true); });
+      .then(function () { setStatus(t("status.refilled")); return refresh().then(loadSupplies); })
+      .catch(function (err) { setStatus(t("err.failed", { msg: err.message }), true); });
   }
   function addSupply() {
     var name = (document.getElementById("sup-name").value || "").trim();
-    if (!name) { setStatus("Give the supply a name", true); return; }
+    if (!name) { setStatus(t("err.supplyName"), true); return; }
     var payload = {
       category: document.getElementById("sup-category").value,
       name: name,
@@ -790,9 +798,9 @@
       .then(function () {
         ["sup-name", "sup-brand", "sup-type", "sup-qty", "sup-unit", "sup-low", "sup-days"]
           .forEach(function (id) { document.getElementById(id).value = ""; });
-        setStatus("Supply added ✓"); return loadSupplies();
+        setStatus(t("status.supplyAdded")); return loadSupplies();
       })
-      .catch(function (err) { setStatus("Failed to add supply (" + err.message + ")", true); });
+      .catch(function (err) { setStatus(t("err.failedSupply", { msg: err.message }), true); });
   }
   function numOrNull(v) { var n = parseFloat(v); return isNaN(n) ? null : n; }
   function intOrNull(v) { var n = parseInt(v, 10); return isNaN(n) ? null : n; }
@@ -823,7 +831,7 @@
       var del = document.createElement("button");
       del.className = "check-del";
       del.textContent = "×";
-      del.setAttribute("aria-label", "Delete item");
+      del.setAttribute("aria-label", t("ready.deleteAria"));
       del.addEventListener("click", function () {
         apiDelete("api/checklist/" + it.id).then(loadChecklist).catch(function () {});
       });
@@ -831,7 +839,7 @@
       ul.appendChild(li);
     });
     var prog = document.getElementById("checklist-progress");
-    if (prog) prog.textContent = items.length ? "— " + done + " / " + items.length + " ready" : "";
+    if (prog) prog.textContent = items.length ? t("ready.progress", { done: done, total: items.length }) : "";
   }
   function addChecklistItem() {
     var inp = document.getElementById("checklist-input");
@@ -861,11 +869,13 @@
           temp = lastEntries[i]; break;
         }
       }
-      if (!temp) { tEl.textContent = "No temperature logged yet."; tEl.className = "hx-readout"; }
+      if (!temp) { tEl.textContent = t("health.tempEmpty"); tEl.className = "hx-readout"; }
       else {
         var fever = isFever(temp.value, temp.value_unit || "");
-        tEl.textContent = "Last: " + fmtNum(temp.value) + (temp.value_unit ? " " + temp.value_unit : "")
-          + " · " + (temp.time || "") + (fever ? "   ⚠ Fever" : "");
+        tEl.textContent = t("health.lastTemp", {
+          value: fmtNum(temp.value) + (temp.value_unit ? " " + temp.value_unit : ""),
+          time: temp.time || "",
+        }) + (fever ? "   ⚠ " + t("alert.fever") : "");
         tEl.className = "hx-readout" + (fever ? " fever" : "");
       }
     }
@@ -873,26 +883,28 @@
     if (mEl) {
       var meds = lastEntries.filter(function (e) { return e.event_type === "medicine"; });
       var today = meds.filter(function (e) { return sameLocalDay(e.logged_at); });
-      if (!meds.length) mEl.textContent = "No medicine logged today.";
-      else mEl.textContent = "Last dose: " + (meds[0].time || "")
-        + (meds[0].note ? " (" + meds[0].note + ")" : "") + " · " + today.length + " today";
+      if (!meds.length) mEl.textContent = t("health.medEmpty");
+      else mEl.textContent = t("health.lastDose", {
+        time: (meds[0].time || "") + (meds[0].note ? " (" + meds[0].note + ")" : ""),
+        n: today.length,
+      });
     }
   }
   function logTemperature() {
     var v = parseFloat(document.getElementById("temp-value").value);
-    if (isNaN(v)) { setStatus("Enter a temperature", true); return; }
+    if (isNaN(v)) { setStatus(t("err.enterTemp"), true); return; }
     var u = document.getElementById("temp-unit").value;
     apiPost("api/event", { event_type: "temperature", value: v, value_unit: u })
-      .then(function () { document.getElementById("temp-value").value = ""; setStatus("Temp logged ✓"); return refresh(); })
-      .catch(function (err) { setStatus("Failed (" + err.message + ")", true); });
+      .then(function () { document.getElementById("temp-value").value = ""; setStatus(t("status.tempLogged")); return refresh(); })
+      .catch(function (err) { setStatus(t("err.failed", { msg: err.message }), true); });
   }
   function logSymptom() {
     var inp = document.getElementById("symptom-input");
     var msg = (inp.value || "").trim();
     if (!msg) return;
     apiPost("api/event", { event_type: "symptom", note: msg })
-      .then(function () { inp.value = ""; setStatus("Symptom logged ✓"); return refresh(); })
-      .catch(function (err) { setStatus("Failed (" + err.message + ")", true); });
+      .then(function () { inp.value = ""; setStatus(t("status.symptomLogged")); return refresh(); })
+      .catch(function (err) { setStatus(t("err.failed", { msg: err.message }), true); });
   }
   function logMedicine() {
     var inp = document.getElementById("med-input");
@@ -900,8 +912,8 @@
     var body = { event_type: "medicine" };
     if (msg) body.note = msg;
     apiPost("api/event", body)
-      .then(function () { inp.value = ""; setStatus("Medicine logged ✓"); return refresh(); })
-      .catch(function (err) { setStatus("Failed (" + err.message + ")", true); });
+      .then(function () { inp.value = ""; setStatus(t("status.medicineLogged")); return refresh(); })
+      .catch(function (err) { setStatus(t("err.failed", { msg: err.message }), true); });
   }
 
   // --- Growth -------------------------------------------------------------
@@ -920,7 +932,7 @@
       var head = document.createElement("div");
       head.className = "metric-head";
       var name = document.createElement("span");
-      name.className = "metric-name"; name.textContent = m[1];
+      name.className = "metric-name"; name.textContent = m[3] + " " + t(m[1]);
       head.appendChild(name);
       var val = document.createElement("span");
       val.className = "metric-val";
@@ -949,7 +961,7 @@
       } else {
         var hint = document.createElement("div");
         hint.className = "metric-hint";
-        hint.textContent = series.length ? "Log another to see the trend" : "No entries yet";
+        hint.textContent = series.length ? t("growth.logAnother") : t("growth.noEntries");
         card.appendChild(hint);
       }
       wrap.appendChild(card);
@@ -1009,7 +1021,7 @@
   function toggleOz() {
     var isLb = growthType() === "weight" && growthUnit() === "lb";
     document.getElementById("growth-oz").hidden = !isLb;
-    document.getElementById("growth-value").placeholder = isLb ? "lb" : "Value";
+    document.getElementById("growth-value").placeholder = isLb ? "lb" : t("growth.valuePlaceholder");
   }
   function logGrowth() {
     var type = growthType(), unit = growthUnit();
@@ -1018,9 +1030,9 @@
     if (type === "weight" && unit === "lb") {
       var oz = parseFloat(document.getElementById("growth-oz").value) || 0;
       var lb = isNaN(v) ? 0 : v;
-      if (lb === 0 && oz === 0) { setStatus("Enter lb / oz", true); return; }
+      if (lb === 0 && oz === 0) { setStatus(t("err.enterLbOz"), true); return; }
       v = lb + oz / 16;
-    } else if (isNaN(v)) { setStatus("Enter a value", true); return; }
+    } else if (isNaN(v)) { setStatus(t("err.enterValue"), true); return; }
     var timeVal = document.getElementById("growth-time").value;
     var iso = timeVal ? localInputToIso(timeVal) : null;
     var body = { event_type: type, value: v, value_unit: unit };
@@ -1030,10 +1042,10 @@
         vEl.value = "";
         document.getElementById("growth-oz").value = "";
         document.getElementById("growth-time").value = nowLocalInput();
-        setStatus("Logged ✓");
+        setStatus(t("status.logged"));
         return refresh().then(loadGrowth);
       })
-      .catch(function (err) { setStatus("Failed (" + err.message + ")", true); });
+      .catch(function (err) { setStatus(t("err.failed", { msg: err.message }), true); });
   }
 
   // --- Tabs ---------------------------------------------------------------
@@ -1074,19 +1086,23 @@
   }
 
   // --- Build UI -----------------------------------------------------------
+  // Rebuilt from scratch on a language switch, so every tile label follows the
+  // active catalog. `def[0]` is a catalog key, resolved here via t().
   function buildGrids() {
     Object.keys(GROUPS).forEach(function (gid) {
       var container = document.getElementById(gid);
+      container.textContent = "";
       GROUPS[gid].forEach(function (def) {
-        var btn = makeTile(def[0], def[1], def[3], def[4]);
+        var btn = makeTile(t(def[0]), def[1], def[3], def[4]);
         btn.addEventListener("click", function () { sendEvent(def[2], btn); });
         container.appendChild(btn);
       });
     });
     // Contraction severity tiles (bigger, in their own grid).
     var cg = document.getElementById("grp-contraction");
+    cg.textContent = "";
     CONTRACTIONS.forEach(function (def) {
-      var btn = makeTile(def[0], def[2], def[3], false);
+      var btn = makeTile(t(def[0]), def[2], def[3], false);
       btn.classList.add("ctx-tile");
       btn.addEventListener("click", function () {
         sendEvent({ event_type: "contraction", event_subtype: def[1] }, btn);
@@ -1104,34 +1120,53 @@
     btn.appendChild(ico); btn.appendChild(lbl);
     return btn;
   }
-  function buildManual() {
-    var sel = document.getElementById("manual-type");
-    EVENT_OPTIONS.forEach(function (o) {
-      var opt = document.createElement("option"); opt.textContent = o.label; sel.appendChild(opt);
+  // Repopulates every <select> whose options carry translated text. Split out
+  // from the wiring below so a language switch can re-run it without
+  // double-binding listeners. Preserves the current selection by index.
+  function fillOptions() {
+    function refill(id, items, make) {
+      var sel = document.getElementById(id);
+      if (!sel) return;
+      var idx = sel.selectedIndex;
+      sel.textContent = "";
+      items.forEach(function (it) { sel.appendChild(make(it)); });
+      if (idx >= 0 && idx < sel.options.length) sel.selectedIndex = idx;
+    }
+    refill("manual-type", EVENT_OPTIONS, function (o) {
+      var opt = document.createElement("option");
+      opt.textContent = o.emoji + " " + t(o.key);
+      return opt;
     });
+    refill("ctx-backfill-intensity", CONTRACTIONS, function (def) {
+      var opt = document.createElement("option");
+      opt.value = def[1]; opt.textContent = def[3] + " " + t(def[0]);
+      return opt;
+    });
+    refill("sup-category", SUPPLY_CATEGORIES, function (c) {
+      var opt = document.createElement("option");
+      opt.value = c; opt.textContent = t("supplyCat." + c);
+      return opt;
+    });
+    refill("sup-consume-type", CONSUME_OPTIONS, function (c) {
+      var opt = document.createElement("option");
+      opt.textContent = t(c[0]);
+      return opt;
+    });
+    refill("growth-type", GROWTH_METRICS, function (m) {
+      var o = document.createElement("option");
+      o.value = m[0]; o.textContent = m[3] + " " + t(m[1]);
+      return o;
+    });
+  }
+  function buildManual() {
     document.getElementById("manual-time").value = nowLocalInput();
     document.getElementById("manual-add").addEventListener("click", addManual);
   }
   function buildContractionsPanel() {
-    var sel = document.getElementById("ctx-backfill-intensity");
-    CONTRACTIONS.forEach(function (def) {
-      var opt = document.createElement("option");
-      opt.value = def[1]; opt.textContent = def[3] + " " + def[0];
-      sel.appendChild(opt);
-    });
     document.getElementById("ctx-backfill-time").value = nowLocalInput();
     document.getElementById("ctx-backfill-add").addEventListener("click", addBackfillContraction);
   }
   function buildSuppliesPanel() {
-    var cat = document.getElementById("sup-category");
-    SUPPLY_CATEGORIES.forEach(function (c) {
-      var opt = document.createElement("option"); opt.value = c;
-      opt.textContent = c.charAt(0).toUpperCase() + c.slice(1); cat.appendChild(opt);
-    });
-    var cons = document.getElementById("sup-consume-type");
-    CONSUME_OPTIONS.forEach(function (c) {
-      var opt = document.createElement("option"); opt.textContent = c[0]; cons.appendChild(opt);
-    });
     document.getElementById("sup-autodec").addEventListener("change", function (e) {
       document.getElementById("sup-consume-row").hidden = !e.target.checked;
     });
@@ -1149,21 +1184,17 @@
     document.getElementById("med-log").addEventListener("click", logMedicine);
   }
   function buildGrowthPanel() {
-    var sel = document.getElementById("growth-type");
-    GROWTH_METRICS.forEach(function (m) {
-      var o = document.createElement("option"); o.value = m[0]; o.textContent = m[1];
-      sel.appendChild(o);
-    });
-    sel.addEventListener("change", syncGrowthUnits);
+    document.getElementById("growth-type").addEventListener("change", syncGrowthUnits);
     document.getElementById("growth-unit").addEventListener("change", toggleOz);
-    syncGrowthUnits();
     document.getElementById("growth-time").value = nowLocalInput();
     document.getElementById("growth-log").addEventListener("click", logGrowth);
   }
   // Apply the configured unit system to the pickers (after /api/config loads).
+  // NB: the temp-unit element is held in `tu`, not `t` — `t` is the global
+  // translate function and shadowing it here would break every lookup below.
   function applyMeasurementDefaults() {
-    var t = document.getElementById("temp-unit");
-    if (t) t.value = imperial ? "°F" : "°C";
+    var tu = document.getElementById("temp-unit");
+    if (tu) tu.value = imperial ? "°F" : "°C";
     syncGrowthUnits();
   }
   // Shared note bar (works on any tab), with the ⭐ special toggle.
@@ -1187,10 +1218,10 @@
         noteSpecial = false;
         var star = document.getElementById("note-star");
         star.textContent = "☆"; star.classList.remove("on");
-        setStatus("Note saved ✓");
+        setStatus(t("status.noteSaved"));
         return refresh();
       })
-      .catch(function (err) { setStatus("Failed to save note (" + err.message + ")", true); });
+      .catch(function (err) { setStatus(t("err.failedNote", { msg: err.message }), true); });
   }
   function buildChecklistPanel() {
     document.getElementById("checklist-add").addEventListener("click", addChecklistItem);
@@ -1202,8 +1233,114 @@
     });
   }
 
-  function init() {
+  // --- Language picker (SDD-004 §3.5.1) -----------------------------------
+  // Every entry is flag + endonym: a flag denotes a country, not a language
+  // (nl-NL vs nl-BE), and regional-indicator emoji fall back to bare letter
+  // pairs on some platforms. The endonym keeps both cases readable.
+  function renderLangMenu() {
+    var menu = document.getElementById("lang-menu");
+    var flagEl = document.getElementById("lang-flag");
+    if (!menu) return;
+    var reg = I18N.registry();
+    var active = I18N.entry(I18N.locale);
+    if (flagEl) flagEl.textContent = (active && active.flag) || "🌐";
+    menu.textContent = "";
+
+    function row(label, sub, selected, onClick) {
+      var d = document.createElement("button");
+      d.type = "button";
+      d.className = "lang-item" + (selected ? " sel" : "");
+      d.setAttribute("role", "menuitem");
+      d.appendChild(document.createTextNode(label));
+      if (sub) {
+        var s = document.createElement("span");
+        s.className = "lang-sub"; s.textContent = sub;
+        d.appendChild(s);
+      }
+      d.addEventListener("click", onClick);
+      menu.appendChild(d);
+      return d;
+    }
+
+    // "Automatic" clears the per-device override. Without it a user who picks a
+    // language they cannot read has no way back.
+    var autoEntry = I18N.entry(I18N.autoLocale);
+    row("🌐 " + t("settings.languageAuto", { lang: (autoEntry && autoEntry.name) || "English" }),
+      null, !I18N.hasOverride(), function () { switchLanguage(null); });
+
+    reg.forEach(function (e) {
+      row((e.flag ? e.flag + " " : "") + e.name,
+        e.status === "machine" ? t("editor.filterMachine") : null,
+        I18N.hasOverride() && e.code === I18N.locale,
+        function () { switchLanguage(e.code); });
+    });
+
+    var edit = row("✎ " + t("settings.editTranslations"), null, false, function () {
+      closeLangMenu();
+      if (window.BTEditor) window.BTEditor.open(I18N.locale);
+    });
+    edit.classList.add("lang-edit");
+  }
+
+  function openLangMenu() {
+    renderLangMenu();
+    document.getElementById("lang-menu").hidden = false;
+    document.getElementById("lang-btn").setAttribute("aria-expanded", "true");
+  }
+  function closeLangMenu() {
+    var m = document.getElementById("lang-menu");
+    if (m) m.hidden = true;
+    var b = document.getElementById("lang-btn");
+    if (b) b.setAttribute("aria-expanded", "false");
+  }
+
+  // Re-render in place rather than reloading, so an open journal editor or an
+  // unsaved note survives a language switch.
+  function applyLanguage() {
+    I18N.applyDom(document);
     buildGrids();
+    fillOptions();
+    syncGrowthUnits();
+    renderLangMenu();
+    if (lastSummaryData) renderSummary(lastSummaryData);
+    renderJournal(lastEntries);
+    renderContractionReadout();
+    renderHealthReadout();
+    if (currentTab === "supplies") loadSupplies();
+    if (currentTab === "growth") loadGrowth();
+    if (currentTab === "get_ready") loadChecklist();
+    loadSummary();
+  }
+
+  function switchLanguage(code) {
+    I18N.setOverride(code);
+    closeLangMenu();
+    I18N.load(code || I18N.autoLocale).then(applyLanguage);
+  }
+
+  function wireLangPicker() {
+    var btn = document.getElementById("lang-btn");
+    if (!btn) return;
+    btn.addEventListener("click", function (e) {
+      e.stopPropagation();
+      var m = document.getElementById("lang-menu");
+      if (m.hidden) openLangMenu(); else closeLangMenu();
+    });
+    document.addEventListener("click", function (e) {
+      var m = document.getElementById("lang-menu");
+      if (!m || m.hidden) return;
+      if (!m.contains(e.target)) closeLangMenu();
+    });
+    document.addEventListener("keydown", function (e) {
+      if (e.key === "Escape") closeLangMenu();
+    });
+  }
+  // Exposed so editor.js can re-apply after a save without a reload.
+  window.BTApplyLanguage = applyLanguage;
+
+  function init() {
+    // Wire listeners once. Anything that renders translated text is built
+    // later, in applyLanguage(), once a catalog is actually loaded.
     buildManual();
     buildContractionsPanel();
     buildHealthPanel();
@@ -1213,6 +1350,7 @@
     wireCommonNote();
     wireAiSummary();
     wireTabs();
+    wireLangPicker();
 
     document.getElementById("reset").addEventListener("click", resetAll);
     document.getElementById("backup").addEventListener("click", backupData);
@@ -1224,12 +1362,23 @@
       e.target.value = ""; // allow re-selecting the same file
     });
 
+    // Boot order matters (SDD-004): the tile labels and <option> text come from
+    // the catalog at build time, so /api/config (which carries `language`) and
+    // the catalog must both land BEFORE anything translated is rendered.
+    var conf = null;
     apiGet("api/config")
+      .catch(function () { return null; })
       .then(function (c) {
+        conf = c;
         if (c && typeof c.fever_threshold_c === "number") feverThresholdC = c.fever_threshold_c;
         if (c && c.measurement_system) imperial = (c.measurement_system === "imperial");
         if (c && c.addon_slug) addonSlug = c.addon_slug;
         if (c && c.timezone) appTz = c.timezone;
+        return I18N.boot(c && c.language);
+      })
+      .catch(function () { /* catalogs unreachable: fall through on English */ })
+      .then(function () {
+        applyLanguage();
         // The add/backfill pickers were pre-filled with "now" before appTz
         // arrived; refresh them so their default is in the add-on's timezone.
         ["manual-time", "growth-time", "ctx-backfill-time"].forEach(function (id) {
@@ -1237,12 +1386,10 @@
           if (el) el.value = nowLocalInput();
         });
         applyMeasurementDefaults();
-        activateTab(pickInitialTab(c && c.default_tab));
-      })
-      .catch(function () { applyMeasurementDefaults(); activateTab(pickInitialTab("baby")); });
-
-    refresh();
-    pollTimer = setInterval(refresh, 10000);
+        activateTab(pickInitialTab(conf && conf.default_tab));
+        refresh();
+        pollTimer = setInterval(refresh, 10000);
+      });
   }
 
   if (document.readyState === "loading") {

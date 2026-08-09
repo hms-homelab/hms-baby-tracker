@@ -13,17 +13,29 @@
 <body>
   <main class="wrap">
     <header class="app-head">
-      <h1>👶 Baby Tracker</h1>
+      <h1><span aria-hidden="true">👶</span> <span data-i18n="app.title">Baby Tracker</span></h1>
       <span id="status" class="status" aria-live="polite"></span>
+      <!-- Language picker (SDD-004). Flag + endonym: a flag alone is a country,
+           not a language, and regional-indicator emoji fall back to letter
+           pairs on some platforms. -->
+      <div class="lang">
+        <button type="button" id="lang-btn" class="lang-btn"
+                aria-haspopup="true" aria-expanded="false"
+                data-i18n-aria="settings.language" aria-label="Language">
+          <span class="lang-flag" id="lang-flag">🇬🇧</span>
+          <span class="lang-caret" aria-hidden="true">▾</span>
+        </button>
+        <div class="lang-menu" id="lang-menu" role="menu" hidden></div>
+      </div>
     </header>
 
     <!-- Summary card (pinned, always visible) -->
-    <section class="card summary" id="summary" aria-label="Today's summary">
+    <section class="card summary" id="summary" data-i18n-aria="sum.aria" aria-label="Today's summary">
       <div class="stat-grid grid grid-2">
         <div class="stat">
           <div class="stat-ico" style="--accent:#FF8FAE">🍼</div>
           <div class="stat-text">
-            <div class="stat-label">Last feed</div>
+            <div class="stat-label" data-i18n="sum.lastFeed">Last feed</div>
             <div class="stat-value" id="sum-feed-val">—</div>
             <div class="stat-sub" id="sum-feed-sub"></div>
           </div>
@@ -31,7 +43,7 @@
         <div class="stat">
           <div class="stat-ico" style="--accent:#E8C24E">🧷</div>
           <div class="stat-text">
-            <div class="stat-label">Last diaper</div>
+            <div class="stat-label" data-i18n="sum.lastDiaper">Last diaper</div>
             <div class="stat-value" id="sum-diaper-val">—</div>
             <div class="stat-sub" id="sum-diaper-sub"></div>
           </div>
@@ -52,63 +64,63 @@
         <div class="ai-text" id="ai-text"></div>
         <div class="ai-foot">
           <span class="ai-meta" id="ai-meta"></span>
-          <button type="button" class="ai-btn" id="ai-generate">Summarize now</button>
+          <button type="button" class="ai-btn" id="ai-generate" data-i18n="ai.generate">Summarize now</button>
         </div>
       </div>
     </section>
 
     <!-- First-run AI privacy notice (shown once per device when AI is on) -->
     <div class="ai-notice" id="ai-notice" hidden>
-      <span>🤖 AI summaries are on. A once-daily <strong>anonymized</strong> recap (counts and trends, never names or notes) is sent to the hosted summary service. Switch the provider or turn it off in <a href="#" id="ai-config-link">Configuration</a>.</span>
-      <button type="button" id="ai-notice-dismiss">Got it</button>
+      <span><span aria-hidden="true">🤖</span> <span data-i18n="ai.notice">AI summaries are on. A once-daily anonymized recap (counts and trends, never names or notes) is sent to the hosted summary service. Switch the provider or turn it off in</span> <a href="#" id="ai-config-link" data-i18n="ai.noticeConfig">Configuration</a>.</span>
+      <button type="button" id="ai-notice-dismiss" data-i18n="ai.gotIt">Got it</button>
     </div>
 
     <!-- Tab bar (horizontally scrollable) -->
-    <nav class="tabs" id="tabs" role="tablist" aria-label="Sections">
-      <button class="tab" data-tab="get_ready" role="tab">🎒 Get&nbsp;Ready</button>
-      <button class="tab" data-tab="baby" role="tab">👶 Baby</button>
-      <button class="tab" data-tab="contractions" role="tab">⏱️ Contractions</button>
-      <button class="tab" data-tab="health" role="tab">🌡️ Health</button>
-      <button class="tab" data-tab="growth" role="tab">📈 Growth</button>
-      <button class="tab" data-tab="supplies" role="tab">🧴 Supplies</button>
+    <nav class="tabs" id="tabs" role="tablist" data-i18n-aria="tabs.aria" aria-label="Sections">
+      <button class="tab" data-tab="get_ready" role="tab"><span aria-hidden="true">🎒</span> <span data-i18n="tab.getReady">Get Ready</span></button>
+      <button class="tab" data-tab="baby" role="tab"><span aria-hidden="true">👶</span> <span data-i18n="tab.baby">Baby</span></button>
+      <button class="tab" data-tab="contractions" role="tab"><span aria-hidden="true">⏱️</span> <span data-i18n="tab.contractions">Contractions</span></button>
+      <button class="tab" data-tab="health" role="tab"><span aria-hidden="true">🌡️</span> <span data-i18n="tab.health">Health</span></button>
+      <button class="tab" data-tab="growth" role="tab"><span aria-hidden="true">📈</span> <span data-i18n="tab.growth">Growth</span></button>
+      <button class="tab" data-tab="supplies" role="tab"><span aria-hidden="true">🧴</span> <span data-i18n="tab.supplies">Supplies</span></button>
     </nav>
 
     <div class="panels">
       <!-- ============ Get Ready ============ -->
       <section class="panel" data-panel="get_ready" hidden>
         <div class="card">
-          <h2 class="group-title">Get Ready <span class="hint" id="checklist-progress"></span></h2>
+          <h2 class="group-title"><span data-i18n="ready.title">Get Ready</span> <span class="hint" id="checklist-progress"></span></h2>
           <ul class="checklist" id="checklist"></ul>
           <div class="note-row">
-            <input type="text" id="checklist-input" placeholder="Add an item" autocomplete="off" />
-            <button class="btn-save" id="checklist-add">Add</button>
+            <input type="text" id="checklist-input" data-i18n-placeholder="ready.addPlaceholder" placeholder="Add an item" autocomplete="off" />
+            <button class="btn-save" id="checklist-add" data-i18n="ready.add">Add</button>
           </div>
-          <div class="foot"><button class="btn-reset" id="checklist-reset">Uncheck all</button></div>
+          <div class="foot"><button class="btn-reset" id="checklist-reset" data-i18n="ready.uncheckAll">Uncheck all</button></div>
         </div>
       </section>
 
       <!-- ============ Baby ============ -->
       <section class="panel" data-panel="baby" hidden>
         <section class="card">
-          <h2 class="group-title">Feed</h2>
+          <h2 class="group-title" data-i18n="group.feed">Feed</h2>
           <div class="grid grid-3" id="grp-feed"></div>
-          <h2 class="group-title">Pump</h2>
+          <h2 class="group-title" data-i18n="group.pump">Pump</h2>
           <div class="grid grid-2" id="grp-pump"></div>
-          <h2 class="group-title">Diaper</h2>
+          <h2 class="group-title" data-i18n="group.diaper">Diaper</h2>
           <div class="grid grid-4" id="grp-diaper"></div>
-          <h2 class="group-title">Other</h2>
+          <h2 class="group-title" data-i18n="group.other">Other</h2>
           <div class="grid grid-4" id="grp-other"></div>
         </section>
 
         <section class="card manual">
-          <h2 class="group-title">Add / backfill an event</h2>
+          <h2 class="group-title" data-i18n="manual.title">Add / backfill an event</h2>
           <div class="manual-row">
-            <select id="manual-type" aria-label="Event type"></select>
-            <input type="datetime-local" id="manual-time" aria-label="When it happened" />
+            <select id="manual-type" data-i18n-aria="manual.typeAria" aria-label="Event type"></select>
+            <input type="datetime-local" id="manual-time" data-i18n-aria="manual.whenAria" aria-label="When it happened" />
           </div>
           <div class="manual-row">
-            <input type="text" id="manual-note" placeholder="Note (optional)" autocomplete="off" />
-            <button class="btn-save" id="manual-add">Add</button>
+            <input type="text" id="manual-note" data-i18n-placeholder="manual.notePlaceholder" placeholder="Note (optional)" autocomplete="off" />
+            <button class="btn-save" id="manual-add" data-i18n="manual.add">Add</button>
           </div>
         </section>
       </section>
@@ -116,15 +128,15 @@
       <!-- ============ Contractions ============ -->
       <section class="panel" data-panel="contractions" hidden>
         <section class="card">
-          <div class="ctx-readout" id="ctx-readout">No contractions yet.</div>
+          <div class="ctx-readout" id="ctx-readout" data-i18n="ctx.empty">No contractions yet.</div>
           <div class="grid ctx-grid" id="grp-contraction"></div>
-          <h2 class="group-title">Backfill a contraction</h2>
+          <h2 class="group-title" data-i18n="ctx.backfillTitle">Backfill a contraction</h2>
           <div class="manual-row">
-            <select id="ctx-backfill-intensity" aria-label="Intensity"></select>
-            <input type="datetime-local" id="ctx-backfill-time" aria-label="When it happened" />
+            <select id="ctx-backfill-intensity" data-i18n-aria="ctx.intensityAria" aria-label="Intensity"></select>
+            <input type="datetime-local" id="ctx-backfill-time" data-i18n-aria="manual.whenAria" aria-label="When it happened" />
           </div>
           <div class="manual-row">
-            <button class="btn-save" id="ctx-backfill-add">Add past contraction</button>
+            <button class="btn-save" id="ctx-backfill-add" data-i18n="ctx.addPast">Add past contraction</button>
           </div>
         </section>
       </section>
@@ -132,28 +144,28 @@
       <!-- ============ Health ============ -->
       <section class="panel" data-panel="health" hidden>
         <section class="card">
-          <h2 class="group-title">Temperature</h2>
-          <div class="hx-readout" id="temp-readout">No temperature logged yet.</div>
+          <h2 class="group-title" data-i18n="health.temperature">Temperature</h2>
+          <div class="hx-readout" id="temp-readout" data-i18n="health.tempEmpty">No temperature logged yet.</div>
           <div class="manual-row">
-            <input type="number" id="temp-value" placeholder="Temp" step="0.1" inputmode="decimal" />
-            <select id="temp-unit" aria-label="Unit">
+            <input type="number" id="temp-value" data-i18n-placeholder="health.tempPlaceholder" placeholder="Temp" step="0.1" inputmode="decimal" />
+            <select id="temp-unit" data-i18n-aria="health.unitAria" aria-label="Unit">
               <option>°C</option>
               <option>°F</option>
             </select>
-            <button class="btn-save" id="temp-log">Log</button>
+            <button class="btn-save" id="temp-log" data-i18n="health.log">Log</button>
           </div>
 
-          <h2 class="group-title">Symptom</h2>
+          <h2 class="group-title" data-i18n="health.symptom">Symptom</h2>
           <div class="note-row">
-            <input type="text" id="symptom-input" placeholder="Runny nose, fussy…" autocomplete="off" />
-            <button class="btn-save" id="symptom-log">Log</button>
+            <input type="text" id="symptom-input" data-i18n-placeholder="health.symptomPlaceholder" placeholder="Runny nose, fussy…" autocomplete="off" />
+            <button class="btn-save" id="symptom-log" data-i18n="health.log">Log</button>
           </div>
 
-          <h2 class="group-title">Medicine</h2>
-          <div class="hx-readout" id="med-readout">No medicine logged today.</div>
+          <h2 class="group-title" data-i18n="health.medicine">Medicine</h2>
+          <div class="hx-readout" id="med-readout" data-i18n="health.medEmpty">No medicine logged today.</div>
           <div class="note-row">
-            <input type="text" id="med-input" placeholder="Name / dose (optional)" autocomplete="off" />
-            <button class="btn-save" id="med-log">Log dose</button>
+            <input type="text" id="med-input" data-i18n-placeholder="health.medPlaceholder" placeholder="Name / dose (optional)" autocomplete="off" />
+            <button class="btn-save" id="med-log" data-i18n="health.logDose">Log dose</button>
           </div>
         </section>
       </section>
@@ -164,18 +176,18 @@
           <div id="growth-metrics"></div>
         </section>
         <section class="card">
-          <h2 class="group-title">Log a measurement</h2>
+          <h2 class="group-title" data-i18n="growth.logTitle">Log a measurement</h2>
           <div class="manual-row">
-            <select id="growth-type" aria-label="Measurement"></select>
-            <select id="growth-unit" aria-label="Unit"></select>
+            <select id="growth-type" data-i18n-aria="growth.measurementAria" aria-label="Measurement"></select>
+            <select id="growth-unit" data-i18n-aria="growth.unitAria" aria-label="Unit"></select>
           </div>
           <div class="manual-row">
-            <input type="number" id="growth-value" placeholder="Value" step="any" inputmode="decimal" />
-            <input type="number" id="growth-oz" placeholder="oz" step="any" inputmode="decimal" hidden />
+            <input type="number" id="growth-value" data-i18n-placeholder="growth.valuePlaceholder" placeholder="Value" step="any" inputmode="decimal" />
+            <input type="number" id="growth-oz" data-i18n-placeholder="growth.ozPlaceholder" placeholder="oz" step="any" inputmode="decimal" hidden />
           </div>
           <div class="manual-row">
-            <input type="datetime-local" id="growth-time" aria-label="When measured" />
-            <button class="btn-save" id="growth-log">Log</button>
+            <input type="datetime-local" id="growth-time" data-i18n-aria="growth.whenAria" aria-label="When measured" />
+            <button class="btn-save" id="growth-log" data-i18n="growth.log">Log</button>
           </div>
         </section>
       </section>
@@ -183,36 +195,36 @@
       <!-- ============ Supplies ============ -->
       <section class="panel" data-panel="supplies" hidden>
         <section class="card">
-          <h2 class="group-title">Supplies <span class="hint">— auto-count down as you log, refill reminders</span></h2>
+          <h2 class="group-title"><span data-i18n="supply.title">Supplies</span> <span class="hint">— <span data-i18n="supply.hint">auto-count down as you log, refill reminders</span></span></h2>
           <ul class="supply-list" id="supply-list"></ul>
         </section>
         <section class="card">
-          <h2 class="group-title">Add a supply</h2>
+          <h2 class="group-title" data-i18n="supply.addTitle">Add a supply</h2>
           <div class="manual-row">
-            <select id="sup-category" aria-label="Category"></select>
-            <input type="text" id="sup-name" placeholder="Name (e.g. Kirkland Formula)" autocomplete="off" />
+            <select id="sup-category" data-i18n-aria="supply.categoryAria" aria-label="Category"></select>
+            <input type="text" id="sup-name" data-i18n-placeholder="supply.namePlaceholder" placeholder="Name (e.g. Kirkland Formula)" autocomplete="off" />
           </div>
           <div class="manual-row">
-            <input type="text" id="sup-brand" placeholder="Brand (optional)" autocomplete="off" />
-            <input type="text" id="sup-type" placeholder="Type (optional)" autocomplete="off" />
+            <input type="text" id="sup-brand" data-i18n-placeholder="supply.brandPlaceholder" placeholder="Brand (optional)" autocomplete="off" />
+            <input type="text" id="sup-type" data-i18n-placeholder="supply.typePlaceholder" placeholder="Type (optional)" autocomplete="off" />
           </div>
           <div class="manual-row">
-            <input type="number" id="sup-qty" placeholder="Qty" min="0" step="any" />
-            <input type="text" id="sup-unit" placeholder="Unit (cans…)" autocomplete="off" />
+            <input type="number" id="sup-qty" data-i18n-placeholder="supply.qtyPlaceholder" placeholder="Qty" min="0" step="any" />
+            <input type="text" id="sup-unit" data-i18n-placeholder="supply.unitPlaceholder" placeholder="Unit (cans…)" autocomplete="off" />
           </div>
           <div class="manual-row">
-            <input type="number" id="sup-low" placeholder="Remind at ≤" min="0" step="any" />
-            <input type="number" id="sup-days" placeholder="Refill every N days" min="0" step="1" />
+            <input type="number" id="sup-low" data-i18n-placeholder="supply.lowPlaceholder" placeholder="Remind at ≤" min="0" step="any" />
+            <input type="number" id="sup-days" data-i18n-placeholder="supply.daysPlaceholder" placeholder="Refill every N days" min="0" step="1" />
           </div>
           <div class="manual-row">
-            <label class="cb"><input type="checkbox" id="sup-autodec" /> Auto-count-down when I log its event</label>
+            <label class="cb"><input type="checkbox" id="sup-autodec" /> <span data-i18n="supply.autodec">Auto-count-down when I log its event</span></label>
           </div>
           <div class="manual-row consume-row" id="sup-consume-row" hidden>
-            <select id="sup-consume-type" aria-label="Consume on event"></select>
-            <input type="number" id="sup-consume-amt" placeholder="Amount / event" min="0" step="any" value="1" />
+            <select id="sup-consume-type" data-i18n-aria="supply.consumeAria" aria-label="Consume on event"></select>
+            <input type="number" id="sup-consume-amt" data-i18n-placeholder="supply.amountPlaceholder" placeholder="Amount / event" min="0" step="any" value="1" />
           </div>
           <div class="manual-row">
-            <button class="btn-save" id="sup-add">Add supply</button>
+            <button class="btn-save" id="sup-add" data-i18n="supply.add">Add supply</button>
           </div>
         </section>
       </section>
@@ -221,26 +233,52 @@
     <!-- Shared note bar (pinned — works on every tab) -->
     <section class="card notes-common">
       <div class="note-row">
-        <button type="button" id="note-star" class="star-toggle" title="Mark as special" aria-label="Mark as special">☆</button>
-        <input type="text" id="common-note" placeholder="Add a note…" autocomplete="off" />
-        <button class="btn-save" id="common-note-save">Save</button>
+        <button type="button" id="note-star" class="star-toggle"
+                data-i18n-title="note.starTitle" data-i18n-aria="note.starTitle"
+                title="Mark as special" aria-label="Mark as special">☆</button>
+        <input type="text" id="common-note" data-i18n-placeholder="note.placeholder" placeholder="Add a note…" autocomplete="off" />
+        <button class="btn-save" id="common-note-save" data-i18n="note.save">Save</button>
       </div>
     </section>
 
     <!-- Journal (pinned below tabs — logs ALL event types) -->
     <section class="card journal">
-      <h2 class="group-title">Journal <span class="hint">— tap a row to fix its time or delete</span></h2>
+      <h2 class="group-title"><span data-i18n="journal.title">Journal</span> <span class="hint">— <span data-i18n="journal.hint">tap a row to fix its time or delete</span></span></h2>
       <ul class="journal-list" id="journal"></ul>
     </section>
 
     <footer class="foot">
-      <button class="btn-reset" id="backup">Back up data</button>
-      <button class="btn-reset" id="restore-btn">Restore</button>
-      <button class="btn-reset" id="reset">Reset All</button>
+      <button class="btn-reset" id="backup" data-i18n="footer.backup">Back up data</button>
+      <button class="btn-reset" id="restore-btn" data-i18n="footer.restore">Restore</button>
+      <button class="btn-reset" id="reset" data-i18n="footer.reset">Reset All</button>
       <input type="file" id="restore-file" accept="application/json,.json" hidden />
     </footer>
   </main>
 
+  <!-- Translation editor (SDD-004 §3.9), opened from the language menu -->
+  <div class="ed-modal" id="ed-modal" hidden role="dialog" aria-modal="true" data-i18n-aria="editor.title" aria-label="Edit translations">
+    <div class="ed-sheet">
+      <header class="ed-head">
+        <div class="ed-lang" id="ed-lang"></div>
+        <button type="button" class="ed-close" id="ed-close" data-i18n-aria="editor.close" aria-label="Close">×</button>
+      </header>
+      <div class="ed-progress">
+        <div class="ed-bar"><i id="ed-bar-done"></i><u id="ed-bar-machine"></u></div>
+        <div class="ed-legend" id="ed-legend"></div>
+      </div>
+      <div class="ed-filters" id="ed-filters"></div>
+      <div class="ed-list" id="ed-list"></div>
+      <footer class="ed-foot">
+        <span class="ed-msg" id="ed-msg"></span>
+        <button type="button" class="btn-reset" id="ed-revert" data-i18n="editor.revert">Revert to shipped</button>
+        <button type="button" class="btn-reset" id="ed-export" data-i18n="editor.export">Export JSON</button>
+        <button type="button" class="btn-save" id="ed-save" data-i18n="editor.save">Save</button>
+      </footer>
+    </div>
+  </div>
+
+  <script src="i18n.js"></script>
   <script src="app.js"></script>
+  <script src="editor.js"></script>
 </body>
 </html>

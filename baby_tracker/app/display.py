@@ -23,6 +23,8 @@ import datetime as dt
 import json
 import logging
 
+from . import i18n
+
 log = logging.getLogger("baby.display")
 
 DISPLAY_TOPIC = "baby/remote/display"
@@ -36,12 +38,13 @@ def _parse(iso: str) -> dt.datetime:
     return d
 
 
-def _ago_str(iso: str | None, now: dt.datetime) -> str | None:
+def _ago_str(iso: str | None, now: dt.datetime, lang: str = "en",
+             data_dir=None) -> str | None:
     if not iso:
         return None
     minutes = int((now - _parse(iso)).total_seconds() // 60)
     if minutes < 1:
-        return "now"
+        return i18n.device("device.now", lang, data_dir)
     h, m = divmod(minutes, 60)
     return f"{h}h{m}m" if h > 0 else f"{m}m"
 
@@ -53,15 +56,24 @@ def _in_str(minutes: int) -> str:
 
 
 def build_rows(last_feed_iso: str | None, last_pump_iso: str | None,
-               pump_interval_min: int, now: dt.datetime | None = None) -> dict:
-    """Return {l1,l2,l3,alert} — the payloads for display + alert topics."""
+               pump_interval_min: int, now: dt.datetime | None = None,
+               lang: str = "en", data_dir=None) -> dict:
+    """Return {l1,l2,l3,alert} — the payloads for display + alert topics.
+
+    `lang` defaults to English so existing callers and the parity tests keep
+    working. Every row goes through i18n.device(), which folds to ASCII and
+    falls back to English past 21 characters (see app/i18n.py).
+    """
     now = now or dt.datetime.now(dt.timezone.utc)
 
-    feed_ago = _ago_str(last_feed_iso, now)
-    pump_ago = _ago_str(last_pump_iso, now)
+    feed_ago = _ago_str(last_feed_iso, now, lang, data_dir)
+    pump_ago = _ago_str(last_pump_iso, now, lang, data_dir)
 
-    l1 = f"Feed {feed_ago} ago" if feed_ago else "Feed: --"
-    l2 = f"Pump {pump_ago} ago" if pump_ago else "Pump: --"
+    def d(key, **vars):
+        return i18n.device(key, lang, data_dir, **vars)
+
+    l1 = d("device.feedAgo", ago=feed_ago) if feed_ago else d("device.feedNone")
+    l2 = d("device.pumpAgo", ago=pump_ago) if pump_ago else d("device.pumpNone")
 
     l3 = ""
     alert = "0"
@@ -69,10 +81,10 @@ def build_rows(last_feed_iso: str | None, last_pump_iso: str | None,
         since = int((now - _parse(last_pump_iso)).total_seconds() // 60)
         due = pump_interval_min - since
         if due <= 0:
-            l3 = "Pump due now"
+            l3 = d("device.pumpDue")
             alert = "1"
         else:
-            l3 = "Pump in " + _in_str(due)
+            l3 = d("device.pumpIn", eta=_in_str(due))
 
     return {"l1": l1, "l2": l2, "l3": l3, "alert": alert}
 
@@ -85,4 +97,16 @@ async def compute_payloads(db, cfg) -> dict:
         last_feed.get("logged_at") if last_feed else None,
         last_pump.get("logged_at") if last_pump else None,
         int(round(cfg.pump_hours * 60)),
+        lang=device_lang(cfg),
+        data_dir=getattr(cfg, "data_dir", None),
     )
+
+
+def device_lang(cfg) -> str:
+    """The language the Baby Remote renders in.
+
+    "auto" has no browser to ask on the server side, so it resolves to English.
+    Set `language` explicitly in the add-on config to translate the device.
+    """
+    lang = getattr(cfg, "language", "auto") or "auto"
+    return "en" if lang == "auto" else lang

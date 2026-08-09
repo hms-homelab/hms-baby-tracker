@@ -1,5 +1,46 @@
 # Changelog
 
+## 2026.4.12 - 2026-08-09
+
+- **added: multi-language support (issue #9).** The Ingress UI ships in
+  **English, Dutch, Spanish and French**, picked from a new flag button in the
+  header. The choice is per browser (`localStorage`), so two parents on one
+  install can each read their own language; an **Automatic** entry follows the
+  new `language` add-on option, or the browser's own language when that is
+  `auto`. Every string moved out of the source and into shared catalogs at
+  `web/i18n/<code>.json`, so **adding a language is one JSON file and no code**.
+- **added: an in-app translation editor.** Language menu -> *Edit translations*.
+  Lists every string with its English source, grouped by area of the app, with a
+  progress bar and Missing/Machine/Device filters. Edits are saved as an override
+  layer under `/data/i18n/`, so they **survive an add-on update**, and **Export
+  JSON** produces a complete language file that can be sent back for everyone.
+  Issue #9's reporter said he is not a programmer; this is so contributing a
+  translation never requires a pull request.
+- **added: the Baby Remote's OLED text is translated too**, via the `language`
+  option. That firmware has an **ASCII-only 5x7 font and a 21-character row**,
+  and it substitutes `?` per byte, so an accented letter would arrive as two
+  question marks and an overlong row would be cut off mid-word without error.
+  Device strings are therefore folded to ASCII (`Tetee`, `strasse`) and gated at
+  21 characters, falling back to English **for that line only** if a translation
+  will not fit. The editor blocks Save past the limit and the server re-checks
+  every write. Note the picker moves the **web UI only**: one remote serves the
+  whole household, so the device follows the add-on option.
+- **added: the AI daily summary follows the UI language.** A single
+  `Respond in <language>.` line is *appended* to the prompt, never substituted,
+  so a custom `summary_prompt` survives intact. English appends nothing, so a
+  default install sends a **byte-identical prompt** to 2026.4.11.
+- **changed:** Dutch, Spanish and French ship as a **machine first pass**, marked
+  `machine` in the picker and editor, and are not yet reviewed by native
+  speakers. The 40 device strings were hand-checked against the ASCII and
+  21-character limits before release. Corrections welcome.
+- **fixed:** the feed reminder banner on the remote used the raw database
+  subtype, so a translated banner would have read half in English
+  (`vorige bottle 23:59`). Subtypes are now translated and length-checked too.
+- **tests:** 42 new (97 total). A locale whose key set drifts from English fails
+  CI, as does an accent or an overlong value in a `device.*` string, a typo'd key
+  in the HTML/JS, an override that invents a key, and an exported file the repo
+  would not accept.
+
 ## 2026.4.11 - 2026-07-22
 
 - **added: the MQTT `baby/remote/event` handler now honors an optional

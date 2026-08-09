@@ -52,6 +52,12 @@ class Config:
     # UI unit defaults: "imperial" (°F, lb/oz, in) or "metric" (°C, kg, cm).
     # Per-entry unit is still stored, so this only sets the default pickers.
     measurement_system: str = "imperial"
+    # UI + Baby Remote language (SDD-004). "auto" lets each browser follow its
+    # own Accept-Language; any catalog code (en, nl, es, fr) forces it. NOTE
+    # this is also the ONLY control for the device's OLED text, which is
+    # rendered server-side: a browser-side picker cannot move it, because one
+    # remote serves the whole household. Under "auto" the device uses English.
+    language: str = "auto"
     # AI daily summaries (SDD-003). Opt-in: OFF by default so nothing leaves the
     # add-on until the user explicitly enables it (a 3rd-party call, even
     # de-identified, should never be on without consent). Hosted proxy is live at
@@ -104,6 +110,7 @@ class Config:
                                              env.get("FEVER_THRESHOLD_C", 38.0))),
             measurement_system=(opts.get("measurement_system")
                                 or env.get("MEASUREMENT_SYSTEM") or "imperial"),
+            language=(opts.get("language") or env.get("LANGUAGE") or "auto"),
             summary_enabled=_as_bool(env.get("SUMMARY_ENABLED")
                                      or ("1" if opts.get("summary_enabled") else "0")),
             summary_provider=(opts.get("summary_provider")

@@ -20,7 +20,7 @@ from zoneinfo import ZoneInfo
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
-from . import display, supplies
+from . import display, i18n, supplies
 
 log = logging.getLogger("baby.scheduler")
 
@@ -134,26 +134,38 @@ class Reminders:
         )
         log.info("armed feed reminder at %s", run_at.isoformat())
 
+    # Alert titles/messages go to Home Assistant, so they use t() and keep full
+    # Unicode + emoji. The OLED banner uses device(): ASCII, max 21 per row.
+    def _lang(self) -> str:
+        return display.device_lang(self.cfg)
+
+    def _t(self, key: str, **vars) -> str:
+        return i18n.t(key, self._lang(), getattr(self.cfg, "data_dir", None), **vars)
+
+    def _d(self, key: str, **vars) -> str:
+        return i18n.device(key, self._lang(), getattr(self.cfg, "data_dir", None), **vars)
+
     async def _fire_pump(self, side: str, pump_time: str) -> None:
-        title = "🤱 Pump Reminder"
-        message = (
-            f"Time to pump again! Last pump ({side}) was at {pump_time} "
-            f"— {self._hrs(self.cfg.pump_hours)} hours ago."
-        )
+        title = "🤱 " + self._t("alert.pumpTitle")
+        message = self._t("alert.pumpMsg", side=side, time=pump_time,
+                          hours=self._hrs(self.cfg.pump_hours))
         if self.mqtt is not None:
             with contextlib.suppress(Exception):
                 await self.mqtt.publish_alert("pump_reminder", title, message, {"side": side})
 
     async def _fire_feed(self, subtype: str, feed_time: str) -> None:
-        title = "🍼 Feed Reminder"
+        title = "🍼 " + self._t("alert.feedTitle")
         what = f" ({subtype})" if subtype else ""
-        message = (
-            f"Time to feed again! Last feed{what} was at {feed_time} "
-            f"— {self._hrs(self.cfg.feed_hours)} hours ago."
-        )
+        message = self._t("alert.feedMsg", what=what, time=feed_time,
+                          hours=self._hrs(self.cfg.feed_hours))
         # Transient OLED banner on the device (n8n "Notify Device" node).
+        # The subtype is a raw DB value ("bottle"/"breast"/"solid"), so it has
+        # to be translated too — otherwise a Dutch banner reads half in English.
         if self.mqtt is not None:
+            what = self._d("device.sub." + subtype) if subtype else self._d("device.feed")
             await self.mqtt.publish_reminder(
-                "Feed reminder", f"last {subtype or 'feed'} {feed_time}", secs=4)
+                self._d("device.feedReminder"),
+                self._d("device.feedReminderSub", what=what, time=feed_time),
+                secs=4)
             with contextlib.suppress(Exception):
                 await self.mqtt.publish_alert("feed_reminder", title, message)
