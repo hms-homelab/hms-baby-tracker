@@ -931,19 +931,22 @@ html, body {
   gap: 8px;
   align-items: stretch;
 }
+/* Layout only. Type, colour, radius and the 2px drop-shadow stay inherited from
+   .btn-save / .btn-reset so these match every other button in the app: an
+   earlier version re-declared font-weight here and silently made the primary
+   action LIGHTER (700) than the house style (800). */
 .ed-foot .btn-reset,
 .ed-foot .btn-save {
   width: 100%;
   min-height: 46px;
-  padding: 8px 10px;
-  font-size: 13px;
-  line-height: 1.15;
   display: flex;
   align-items: center;
   justify-content: center;
   text-align: center;
+  line-height: 1.15;
 }
-.ed-foot .btn-save { font-weight: 700; font-size: 14px; }
+/* .btn-reset is the only one that may wrap, so it alone relaxes nowrap. */
+.ed-foot .btn-reset { padding: 8px 10px; white-space: normal; }
 /* The status line sits above the buttons rather than competing for width. */
 .ed-msg {
   grid-column: 1 / -1;
