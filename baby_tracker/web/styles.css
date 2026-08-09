@@ -918,9 +918,40 @@ html, body {
   padding-top: 10px;
   border-top: 1px solid var(--line);
 }
-.ed-msg { flex: 1 1 auto; font-size: 12px; color: var(--good); }
 .ed-msg.err { color: #e89b8b; }
 .ed-foot .btn-save[disabled] { opacity: 0.4; pointer-events: none; }
+
+/* Save is the primary action, so it must not be the smallest control in the
+   row. The two secondary buttons wrap to two lines on a phone and were ending
+   up physically larger than the thing you actually press. Equal widths, with
+   Save given the extra weight. */
+.ed-foot {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1.25fr;
+  gap: 8px;
+  align-items: stretch;
+}
+.ed-foot .btn-reset,
+.ed-foot .btn-save {
+  width: 100%;
+  min-height: 46px;
+  padding: 8px 10px;
+  font-size: 13px;
+  line-height: 1.15;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+}
+.ed-foot .btn-save { font-weight: 700; font-size: 14px; }
+/* The status line sits above the buttons rather than competing for width. */
+.ed-msg {
+  grid-column: 1 / -1;
+  min-height: 16px;
+  padding-bottom: 2px;
+  font-size: 12px;
+  color: var(--good);
+}
 
 @media (max-width: 620px) {
   .ed-row { grid-template-columns: 1fr; gap: 4px; padding: 9px 0; }

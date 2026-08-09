@@ -286,6 +286,15 @@ def test_revert_single_key_and_all(client):
     assert rows["sum.awake"]["override"] is None
 
 
+def test_catalog_endpoint_carries_comments_for_export(client):
+    """The `_`-prefixed translator notes are not editable rows, but the client
+    re-emits them so an exported file matches the repo's files exactly."""
+    d = client.get("/api/i18n/catalog?lang=nl").json()
+    assert "_comment_device" in d["comments"]
+    assert "21" in d["comments"]["_comment_device"]
+    assert not any(r["key"].startswith("_") for r in d["rows"])
+
+
 def test_export_round_trips_into_the_repo(client):
     """The contributor's whole path: edit, Export, drop the file into web/i18n/.
     The exported file must pass the completeness check in test 1."""

@@ -555,8 +555,14 @@ def create_app(cfg: Config | None = None) -> FastAPI:
                 "is_device": key.startswith("device."),
                 "limit": i18n.DEVICE_MAX if key.startswith("device.") else None,
             })
+        # `_`-prefixed notes (the device 21-char warning) are not editable rows,
+        # but the client re-emits them so an exported file matches the repo's
+        # files exactly.
+        ship_en = i18n.shipped("en")
+        comments = {k: ship.get(k, ship_en.get(k))
+                    for k in ship_en if k.startswith("_")}
         return {"lang": lang, "entry": i18n.entry(lang), "rows": rows,
-                "registry": i18n.registry()}
+                "comments": comments, "registry": i18n.registry()}
 
     @app.put("/api/i18n/{lang}")
     async def i18n_save(lang: str, body: dict = Body(...)):

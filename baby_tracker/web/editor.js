@@ -16,6 +16,7 @@
   var LIMIT = 21;                 // Baby Remote OLED row width; see app/i18n.py
   var lang = "en";
   var rows = [];                  // [{key, en, shipped, override, effective, is_device}]
+  var comments = {};              // "_"-prefixed notes, re-emitted on export
   var edits = {};                 // key -> new value (dirty set)
   var filter = "all";
 
@@ -263,6 +264,7 @@
     return api("GET", "api/i18n/catalog?lang=" + encodeURIComponent(lang))
       .then(function (d) {
         rows = d.rows || [];
+        comments = d.comments || {};
         renderHeader();
         renderProgress();
         renderFilters();
@@ -315,19 +317,26 @@
 
   /* Downloads a complete catalog shaped exactly like the repo's files, so it
    * can be attached to the issue or dropped into a PR unchanged. */
+  /* Downloads a complete catalog shaped exactly like the repo's files, so it
+   * can be attached to the issue or dropped into a PR unchanged.
+   *
+   * Built from what is ON SCREEN, not from the server. Exporting over the wire
+   * would return only SAVED edits, so someone who translated a whole language
+   * and pressed Export without pressing Save first would silently send the old
+   * file and believe they had sent their work. Export now always matches what
+   * you can see, whether or not you saved. */
   function exportJson() {
-    fetch("api/i18n/" + encodeURIComponent(lang) + "/export")
-      .then(function (r) { return r.json(); })
-      .then(function (data) {
-        var blob = new Blob([JSON.stringify(data, null, 2) + "\n"],
-          { type: "application/json" });
-        var url = URL.createObjectURL(blob);
-        var a = document.createElement("a");
-        a.href = url; a.download = lang + ".json";
-        document.body.appendChild(a); a.click(); document.body.removeChild(a);
-        URL.revokeObjectURL(url);
-      })
-      .catch(function (err) { setMsg(t("editor.saveFailed", { msg: err.message }), true); });
+    var data = {};
+    Object.keys(comments).forEach(function (k) { data[k] = comments[k]; });
+    rows.forEach(function (r) { data[r.key] = valueOf(r); });
+    var blob = new Blob([JSON.stringify(data, null, 2) + "\n"],
+      { type: "application/json" });
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement("a");
+    a.href = url; a.download = lang + ".json";
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    setMsg(t("editor.exported", { lang: lang }));
   }
 
   function open(code) {
