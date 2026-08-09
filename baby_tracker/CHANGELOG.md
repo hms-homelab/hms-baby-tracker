@@ -36,6 +36,32 @@
 - **fixed:** the feed reminder banner on the remote used the raw database
   subtype, so a translated banner would have read half in English
   (`vorige bottle 23:59`). Subtypes are now translated and length-checked too.
+- **fixed: Export JSON silently dropped unsaved work.** It fetched the file
+  from the server, so it contained only *saved* edits. Someone could translate
+  a whole language, press Export without pressing Save, and send back the old
+  file believing they had sent their work. Since the point of the editor is
+  that a non-programmer can contribute without a pull request, that failure
+  landed on exactly the person it was built for, and it failed silently.
+  Export is now built from what is on screen and always matches what you see,
+  saved or not. The exported file still carries the translator notes, so it
+  matches the repo's files byte for byte, and a message names the download.
+- **fixed: the Save and Export buttons could be unreachable.** The string list
+  is a flex item and had no `min-height: 0`, so it refused to shrink below its
+  content and pushed the whole footer off the sheet. The sheet was also capped
+  at `92vh`, and on mobile `vh` measures the viewport with the browser toolbar
+  collapsed, so the footer hid behind the URL bar. Now `92dvh` with a `vh`
+  fallback, plus safe-area padding for the iOS home indicator.
+- **fixed: Save was styled lighter than every other Save in the app.** The
+  footer rules re-declared type and dropped the button to font-weight 700
+  against the house 800. Those rules are now layout only, so type, colour,
+  radius and the drop-shadow are inherited. Save is also no longer the
+  smallest control in its own row: equal-width grid with the primary action
+  given the extra column, and `Revert to shipped` shortened to `Revert` so
+  nothing wraps at 360px.
+
+Save and Export remain separate on purpose: **Save** applies a translation to
+this install (persisted in `/data`, survives add-on updates, reaches the Baby
+Remote), **Export** is how the work travels back to the repo for everyone else.
 - **tests:** 42 new (97 total). A locale whose key set drifts from English fails
   CI, as does an accent or an overlong value in a `device.*` string, a typo'd key
   in the HTML/JS, an override that invents a key, and an exported file the repo
