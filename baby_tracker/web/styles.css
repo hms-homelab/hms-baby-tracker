@@ -750,11 +750,17 @@ html, body {
   display: flex;
   flex-direction: column;
   width: min(760px, 100%);
+  /* `vh` on mobile is measured against the viewport with the browser toolbar
+     COLLAPSED, so a 92vh sheet is taller than what you can actually see and its
+     footer (Save / Export) hides behind the URL bar. `dvh` tracks the real
+     visible height; the vh line stays as the fallback for older engines. */
   max-height: 92vh;
+  max-height: 92dvh;
   background: var(--bg);
   border: 1px solid var(--line-2);
   border-radius: 16px 16px 0 0;
-  padding: 14px 14px 12px;
+  /* Keep the footer clear of the iOS home indicator. */
+  padding: 14px 14px calc(12px + env(safe-area-inset-bottom, 0px));
 }
 .ed-head {
   display: flex;
@@ -827,7 +833,19 @@ html, body {
 }
 .ed-chip.on { background: var(--glow); border-color: var(--glow); color: #1A1520; }
 
-.ed-list { flex: 1 1 auto; overflow-y: auto; padding: 4px 2px 8px; }
+/* `min-height: 0` is load-bearing: a flex item defaults to min-height:auto and
+   refuses to shrink below its content, so without it this list does not scroll,
+   it just grows and shoves the footer (Save / Export JSON) off the sheet. */
+.ed-list {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 4px 2px 8px;
+}
+/* Never let the actions scroll away with the list. */
+.ed-foot { flex: none; }
+.ed-head, .ed-progress, .ed-filters { flex: none; }
 .ed-group {
   display: flex;
   align-items: center;
