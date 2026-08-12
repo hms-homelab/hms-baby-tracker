@@ -367,11 +367,16 @@ def create_app(cfg: Config | None = None) -> FastAPI:
     @app.get("/api/config")
     async def get_config():
         valid = {"get_ready", "baby", "contractions", "health", "growth", "supplies"}
+        hidden = list(cfg.hidden_modules or [])
         tab = cfg.default_tab if cfg.default_tab in valid else "baby"
+        # Landing on a hidden tab would open the app to a blank screen.
+        if "tab." + tab in hidden:
+            tab = "baby"
         system = cfg.measurement_system if cfg.measurement_system in ("imperial", "metric") else "imperial"
         return {"default_tab": tab, "fever_threshold_c": cfg.fever_threshold_c,
                 "measurement_system": system, "summary_enabled": cfg.summary_enabled,
                 "timezone": cfg.timezone, "language": cfg.language,
+                "hidden_modules": hidden,
                 "addon_slug": await addon_slug()}
 
     # --- AI daily summary (SDD-003) ---------------------------------------

@@ -9,8 +9,20 @@ from __future__ import annotations
 
 import json
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
+
+# Modules the UI can be told to hide (SDD-005). `tab.baby` is deliberately
+# absent: something has to stay navigable, and Baby is the home tab.
+HIDEABLE_MODULES = (
+    "tab.get_ready", "tab.contractions", "tab.health", "tab.growth", "tab.supplies",
+    "group.feed", "group.pump", "group.diaper", "group.other",
+    "feed.breast", "feed.bottle", "feed.solid",
+    "pump.left", "pump.right",
+    "diaper.pee", "diaper.poop", "diaper.both", "diaper.change",
+    "sleep", "bath", "medicine", "tummy_time",
+    "card.summary", "card.manual",
+)
 
 OPTIONS_PATH = Path(os.environ.get("OPTIONS_PATH", "/data/options.json"))
 
@@ -58,6 +70,13 @@ class Config:
     # rendered server-side: a browser-side picker cannot move it, because one
     # remote serves the whole household. Under "auto" the device uses English.
     language: str = "auto"
+    # UI modules to hide (SDD-005), e.g. ["tab.contractions", "feed.bottle"].
+    # A HIDE-list, not an enable-list: the default is empty so an existing
+    # install is untouched, and a module added in a later version shows up on
+    # its own instead of going missing from someone's saved selection. Purely
+    # presentational. Hidden event types are still accepted over REST and MQTT,
+    # so the Baby Remote and existing automations keep working.
+    hidden_modules: list[str] = field(default_factory=list)
     # AI daily summaries (SDD-003). Opt-in: OFF by default so nothing leaves the
     # add-on until the user explicitly enables it (a 3rd-party call, even
     # de-identified, should never be on without consent). Hosted proxy is live at
@@ -68,6 +87,9 @@ class Config:
     summary_daily_cap: int = 2
     summary_hosted_url: str = "https://babytracker.shmaestro.com"
     summary_ollama_url: str = "http://192.168.2.5:11434"
+    # Base URL for the `openai` provider. Blank = api.openai.com. Set it to
+    # reach any OpenAI-compatible service (OpenRouter, Ollama, LiteLLM, Groq).
+    summary_openai_url: str = ""
     summary_model: str = "gpt-oss:120b-cloud"
     summary_api_key: str = ""          # for anthropic/openai/gemini
     summary_prompt: str = DEFAULT_SUMMARY_PROMPT
@@ -111,6 +133,8 @@ class Config:
             measurement_system=(opts.get("measurement_system")
                                 or env.get("MEASUREMENT_SYSTEM") or "imperial"),
             language=(opts.get("language") or env.get("LANGUAGE") or "auto"),
+            hidden_modules=_as_list(opts.get("hidden_modules")
+                                    or env.get("HIDDEN_MODULES")),
             summary_enabled=_as_bool(env.get("SUMMARY_ENABLED")
                                      or ("1" if opts.get("summary_enabled") else "0")),
             summary_provider=(opts.get("summary_provider")
@@ -123,6 +147,8 @@ class Config:
             summary_ollama_url=(opts.get("summary_ollama_url")
                                 or env.get("SUMMARY_OLLAMA_URL")
                                 or "http://192.168.2.5:11434"),
+            summary_openai_url=(opts.get("summary_openai_url")
+                                or env.get("SUMMARY_OPENAI_URL") or ""),
             summary_model=(opts.get("summary_model") or env.get("SUMMARY_MODEL")
                            or "gpt-oss:120b-cloud"),
             summary_api_key=(opts.get("summary_api_key")
@@ -155,3 +181,25 @@ class Config:
 
 def _as_bool(val: str | None) -> bool:
     return str(val).lower() in ("1", "true", "yes", "on")
+
+
+def _as_list(val) -> list[str]:
+    """Normalize the hidden_modules option to a clean list of module ids.
+
+    Supervisor hands us a real list; the env fallback is comma separated. Unknown
+    ids are dropped rather than passed through, so a typo cannot silently travel
+    to the browser and hide nothing while looking configured.
+    """
+    if isinstance(val, str):
+        items = val.split(",")
+    elif isinstance(val, (list, tuple)):
+        items = list(val)
+    else:
+        return []
+    seen, out = set(), []
+    for item in items:
+        mod = str(item).strip().lower()
+        if mod in HIDEABLE_MODULES and mod not in seen:
+            seen.add(mod)
+            out.append(mod)
+    return out

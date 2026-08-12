@@ -109,6 +109,9 @@ html, body {
   min-width: 0;
 }
 .summary .stat-wide { margin-bottom: 13px; }
+/* display:flex above beats the UA [hidden] rule, so hiding a stat row via
+   hidden_modules (SDD-005) needs this back. Same for .grid and .tab below. */
+.summary .stat[hidden] { display: none; }
 .summary .stat-ico {
   width: 40px;
   height: 40px;
@@ -205,6 +208,7 @@ html, body {
 
 /* Tile grids */
 .grid { display: grid; gap: 9px; }
+.grid[hidden] { display: none; }
 .grid-2 { grid-template-columns: repeat(2, 1fr); }
 .grid-3 { grid-template-columns: repeat(3, 1fr); }
 .grid-4 { grid-template-columns: repeat(4, 1fr); }
@@ -404,6 +408,7 @@ html, body {
   border-color: transparent;
 }
 .tab:disabled { opacity: 0.5; cursor: default; }
+.tab[hidden] { display: none; }
 .tab .soon {
   font-size: 8px;
   font-family: var(--mono);

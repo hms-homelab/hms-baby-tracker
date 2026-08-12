@@ -1,5 +1,28 @@
 # Changelog
 
+## 2026.4.13 - 2026-08-12
+
+- **added: hide the modules you do not use (discussion #8).** A new
+  `hidden_modules` option takes any number of entries and removes them from the
+  web UI: whole tabs (`tab.contractions`, `tab.get_ready`, ...), button groups
+  (`group.pump`), single buttons (`feed.bottle`, `sleep`), or the AI and
+  backfill cards. Once the baby is home the pre-birth tabs have done their job,
+  and a breastfeeding-only household has no use for Bottle and Solid. It is a
+  **hide-list, not an enable-list**, so the default is empty, nothing changes for
+  existing installs, and a module added in a future version shows up on its own
+  instead of going missing from a saved selection. **Hiding is presentation
+  only**: entries already logged still appear in the journal, and the API and
+  MQTT keep accepting hidden event types, so the Baby Remote and existing
+  automations keep working. A group whose buttons are all hidden loses its
+  heading, and a `default_tab` pointing at a hidden tab falls back to Baby.
+- **added: `summary_openai_url`, so the `openai` provider reaches any
+  OpenAI-compatible service (discussion #8).** Previously it was pinned to
+  `api.openai.com` with no way to override the host, which locked out OpenRouter,
+  Ollama and Ollama Cloud, LiteLLM, LM Studio, vLLM and Groq even though they all
+  speak the same chat-completions format. Blank keeps the old behaviour. The URL
+  is forgiving about the exact form: with or without `/v1`, with or without a
+  trailing slash, or a full `.../v1/chat/completions` pasted from the docs.
+
 ## 2026.4.12 - 2026-08-09
 
 - **added: multi-language support (issue #9).** The Ingress UI ships in

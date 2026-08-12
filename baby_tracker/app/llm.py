@@ -7,7 +7,11 @@ One `generate(cfg, prompt, install_token)` entry point dispatches on
                 (a dumb, rate-limited relay Albin runs; the default)
   ollama     -> POST {summary_ollama_url}/api/generate  (self-hosted)
   anthropic  -> Claude Messages API      (summary_api_key + summary_model)
-  openai     -> Chat Completions         (summary_api_key + summary_model)
+  openai     -> Chat Completions at {summary_openai_url} (summary_api_key +
+                summary_model). The base URL is configurable, so this provider
+                reaches ANY OpenAI-compatible service (OpenRouter, Ollama and
+                Ollama Cloud, LiteLLM, LM Studio, vLLM, Groq, Together), not
+                just api.openai.com.
   gemini     -> generateContent          (summary_api_key + summary_model)
 
 The prompt is always built by the add-on (instruction + de-identified digest), so
@@ -24,6 +28,9 @@ log = logging.getLogger("baby.llm")
 
 TIMEOUT = 60.0
 MAX_TOKENS = 400
+
+# Where the `openai` provider points when summary_openai_url is blank.
+DEFAULT_OPENAI_BASE = "https://api.openai.com/v1"
 
 
 class CapError(Exception):
@@ -95,6 +102,27 @@ async def _anthropic(cfg, prompt: str) -> str:
         return "".join(p.get("text", "") for p in parts).strip()
 
 
+def openai_endpoint(cfg) -> str:
+    """Resolve the chat-completions URL for the OpenAI-compatible provider.
+
+    Deliberately tolerant about what the user pastes, because every service
+    documents its base URL differently and a wrong guess surfaces only as an
+    opaque 404. All of these end up at the same call:
+
+      ""                                     -> api.openai.com/v1/chat/completions
+      https://openrouter.ai/api              -> .../api/v1/chat/completions
+      https://openrouter.ai/api/v1           -> .../api/v1/chat/completions
+      http://homeassistant.local:11434/v1/   -> .../v1/chat/completions
+      https://x/v1/chat/completions          -> unchanged
+    """
+    base = (cfg.summary_openai_url or "").strip().rstrip("/") or DEFAULT_OPENAI_BASE
+    if base.endswith("/chat/completions"):
+        return base
+    if not base.endswith("/v1"):
+        base += "/v1"
+    return base + "/chat/completions"
+
+
 async def _openai(cfg, prompt: str) -> str:
     headers = {"Authorization": f"Bearer {cfg.summary_api_key}"}
     body = {
@@ -103,8 +131,7 @@ async def _openai(cfg, prompt: str) -> str:
         "messages": [{"role": "user", "content": prompt}],
     }
     async with httpx.AsyncClient(timeout=TIMEOUT) as client:
-        r = await client.post("https://api.openai.com/v1/chat/completions",
-                              json=body, headers=headers)
+        r = await client.post(openai_endpoint(cfg), json=body, headers=headers)
         r.raise_for_status()
         choices = r.json().get("choices") or [{}]
         return (choices[0].get("message", {}).get("content") or "").strip()

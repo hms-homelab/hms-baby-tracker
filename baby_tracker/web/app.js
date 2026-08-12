@@ -73,10 +73,18 @@
 
   // Flattened Baby type list for the manual-entry dropdown (key + payload).
   // Labels are resolved at build time so a language switch rebuilds them.
+  // Container id -> hideable module id (SDD-005).
+  var GROUP_MODULE = {
+    "grp-feed": "group.feed",
+    "grp-pump": "group.pump",
+    "grp-diaper": "group.diaper",
+    "grp-other": "group.other",
+  };
+
   var EVENT_OPTIONS = [];
   Object.keys(GROUPS).forEach(function (gid) {
     GROUPS[gid].forEach(function (def) {
-      EVENT_OPTIONS.push({ key: def[0], emoji: def[3], payload: def[2] });
+      EVENT_OPTIONS.push({ key: def[0], emoji: def[3], payload: def[2], group: GROUP_MODULE[gid] });
     });
   });
   EVENT_OPTIONS.push({ key: "opt.note", emoji: "📝", payload: { event_type: "note" } });
@@ -94,6 +102,51 @@
   var addonSlug = "";           // this add-on's Supervisor slug (config deep link)
   var appTz = "";               // add-on's IANA timezone (anchors the datetime pickers)
   var PANELS = { get_ready: 1, baby: 1, contractions: 1, health: 1, growth: 1, supplies: 1 };
+
+  // --- Module visibility (SDD-005) ----------------------------------------
+  // `hidden_modules` from /api/config, as a lookup. Presentation only: hidden
+  // event types are still accepted by the API, so the Baby Remote and any
+  // automations keep logging them and past entries stay in the journal.
+  var hidden = {};
+
+  function visible(id) { return !hidden[id]; }
+
+  // Module id for a button payload. Sleep start and end share one id: a
+  // half-visible sleep pair cannot be used to log anything meaningful.
+  function moduleOf(payload) {
+    if (payload.event_type === "sleep") return "sleep";
+    return payload.event_subtype
+      ? payload.event_type + "." + payload.event_subtype
+      : payload.event_type;
+  }
+
+  // Manual/backfill dropdown contents. Must stay the single source of truth for
+  // both the <option> list and the click handler, which pairs them by index.
+  function visibleEventOptions() {
+    return EVENT_OPTIONS.filter(function (o) {
+      if (o.payload.event_type === "note") return true;   // notes are never hidden
+      return visible(o.group) && visible(moduleOf(o.payload));
+    });
+  }
+
+  // Drops hidden tabs from the bar and their panels from navigation, and hides
+  // the standalone summary rows and cards. Group and tile filtering happens in
+  // buildGrids, which reruns on a language switch.
+  function applyHiddenModules() {
+    Object.keys(PANELS).forEach(function (name) {
+      if (name === "baby") return;                        // home tab, never hidden
+      if (visible("tab." + name)) return;
+      delete PANELS[name];
+      var btn = document.querySelector('.tab[data-tab="' + name + '"]');
+      var panel = document.querySelector('.panel[data-panel="' + name + '"]');
+      if (btn) btn.hidden = true;
+      if (panel) panel.hidden = true;
+    });
+    var sleepRow = document.getElementById("sum-sleep");
+    if (sleepRow) sleepRow.hidden = !visible("sleep");
+    var manualCard = document.querySelector(".card.manual");
+    if (manualCard) manualCard.hidden = !visible("card.manual");
+  }
 
   // --- Networking ---------------------------------------------------------
   function setStatus(msg, isErr) {
@@ -249,7 +302,18 @@
 
   // Renders each aux item as a pinned stat-card or an unpinned chip, per the
   // saved pin set.
+  // Which module each aux stat belongs to, so hiding a tab or a button also
+  // drops its roll-up figure instead of leaving a permanent "—".
+  var STAT_MODULE = {
+    pumps: "group.pump", baths: "bath", meds: "medicine", tummy: "tummy_time",
+    contractions: "tab.contractions", ready: "tab.get_ready",
+    temp: "tab.health", weight: "tab.growth",
+  };
+
   function renderAuxStats(items) {
+    items = items.filter(function (it) {
+      return !STAT_MODULE[it.key] || visible(STAT_MODULE[it.key]);
+    });
     var pinned = loadPinned();
     var extraEl = document.getElementById("sum-extra");
     var chipsEl = document.getElementById("sum-chips");
@@ -531,7 +595,11 @@
     var box = document.getElementById("sum-ai");
     var notice = document.getElementById("ai-notice");
     if (!box) return;
-    if (!data || !data.enabled) { box.hidden = true; if (notice) notice.hidden = true; return; }
+    if (!data || !data.enabled || !visible("card.summary")) {
+      box.hidden = true;
+      if (notice) notice.hidden = true;
+      return;
+    }
     box.hidden = false;
     var txt = document.getElementById("ai-text");
     var meta = document.getElementById("ai-meta");
@@ -612,7 +680,7 @@
   }
   function addManual() {
     var sel = document.getElementById("manual-type");
-    var opt = EVENT_OPTIONS[sel.selectedIndex];
+    var opt = visibleEventOptions()[sel.selectedIndex];
     if (!opt) return;
     var timeVal = document.getElementById("manual-time").value;
     var noteVal = (document.getElementById("manual-note").value || "").trim();
@@ -1092,11 +1160,19 @@
     Object.keys(GROUPS).forEach(function (gid) {
       var container = document.getElementById(gid);
       container.textContent = "";
+      var groupOn = visible(GROUP_MODULE[gid]);
       GROUPS[gid].forEach(function (def) {
+        if (!groupOn || !visible(moduleOf(def[2]))) return;
         var btn = makeTile(t(def[0]), def[1], def[3], def[4]);
         btn.addEventListener("click", function () { sendEvent(def[2], btn); });
         container.appendChild(btn);
       });
+      // A group whose tiles are all hidden loses its heading too, otherwise the
+      // Baby tab keeps a title with nothing under it.
+      var empty = !container.firstChild;
+      container.hidden = empty;
+      var title = container.previousElementSibling;
+      if (title && title.classList.contains("group-title")) title.hidden = empty;
     });
     // Contraction severity tiles (bigger, in their own grid).
     var cg = document.getElementById("grp-contraction");
@@ -1132,7 +1208,7 @@
       items.forEach(function (it) { sel.appendChild(make(it)); });
       if (idx >= 0 && idx < sel.options.length) sel.selectedIndex = idx;
     }
-    refill("manual-type", EVENT_OPTIONS, function (o) {
+    refill("manual-type", visibleEventOptions(), function (o) {
       var opt = document.createElement("option");
       opt.textContent = o.emoji + " " + t(o.key);
       return opt;
@@ -1374,10 +1450,16 @@
         if (c && c.measurement_system) imperial = (c.measurement_system === "imperial");
         if (c && c.addon_slug) addonSlug = c.addon_slug;
         if (c && c.timezone) appTz = c.timezone;
+        // Must land before applyLanguage(), which rebuilds the tiles and the
+        // manual-entry dropdown from the (now filtered) catalogs.
+        if (c && c.hidden_modules) {
+          c.hidden_modules.forEach(function (id) { hidden[id] = 1; });
+        }
         return I18N.boot(c && c.language);
       })
       .catch(function () { /* catalogs unreachable: fall through on English */ })
       .then(function () {
+        applyHiddenModules();
         applyLanguage();
         // The add/backfill pickers were pre-filled with "now" before appTz
         // arrived; refresh them so their default is in the add-on's timezone.

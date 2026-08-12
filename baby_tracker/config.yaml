@@ -32,12 +32,14 @@ options:
   fever_threshold_c: 38.0
   measurement_system: imperial
   language: auto
+  hidden_modules: []
   summary_enabled: false
   summary_provider: hosted
   summary_hour: 6
   summary_daily_cap: 2
   summary_hosted_url: "https://babytracker.shmaestro.com"
   summary_ollama_url: "http://192.168.2.5:11434"
+  summary_openai_url: ""
   summary_model: "gpt-oss:120b-cloud"
   summary_api_key: ""
   summary_prompt: "You are a warm, encouraging newborn-care assistant. From today's anonymized activity, write a 2-3 sentence plain-language recap for a tired parent. Gently note anything that stands out (a longer gap between feeds, fewer diapers than yesterday, a fever) without alarming, diagnosing, or giving medical advice. No names, and do not use em-dashes. Respond with only the recap."
@@ -72,6 +74,14 @@ schema:
   # the web UI does not move it. Under "auto" the device shows English.
   # Translations can be edited in-app: language menu -> Edit translations.
   language: list(auto|en|nl|es|fr)
+  # Modules to HIDE in the web UI. Empty (the default) shows everything. Add an
+  # entry per tab, button group or single button you do not use, e.g. hide
+  # tab.contractions and tab.get_ready once the baby is home, or feed.bottle if
+  # you only breastfeed. Presentation only: nothing is deleted, past entries
+  # still show in the journal, and the Baby Remote plus any automations keep
+  # logging hidden types. The Baby tab cannot be hidden.
+  hidden_modules:
+    - list(tab.get_ready|tab.contractions|tab.health|tab.growth|tab.supplies|group.feed|group.pump|group.diaper|group.other|feed.breast|feed.bottle|feed.solid|pump.left|pump.right|diaper.pee|diaper.poop|diaper.both|diaper.change|sleep|bath|medicine|tummy_time|card.summary|card.manual)?
   # AI daily summaries: a warm plain-language recap of the day, shown in the
   # summary card. Sends only an ANONYMIZED digest (counts/trends, never names or
   # notes). Provider: hosted proxy, your own Ollama, or a Claude/Gemini/OpenAI key.
@@ -83,6 +93,11 @@ schema:
   summary_daily_cap: int(1,50)
   summary_hosted_url: str?
   summary_ollama_url: str?
+  # Base URL for the "openai" provider. Blank = OpenAI itself. Set it to use any
+  # OpenAI-compatible service, e.g. https://openrouter.ai/api/v1, Ollama at
+  # http://homeassistant.local:11434/v1, https://ollama.com/v1, LiteLLM, Groq.
+  # Pair it with summary_model (that service's model id) and summary_api_key.
+  summary_openai_url: str?
   summary_model: str?
   summary_api_key: password?
   summary_prompt: str?

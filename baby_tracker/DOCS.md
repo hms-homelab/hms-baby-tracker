@@ -39,12 +39,14 @@ automations. Stats are exposed back to Home Assistant as native entities.
 | `fever_threshold_c` | float        | `38.0`             | A logged temperature at/above this (in °C) is flagged as a fever in the Health tab. °F entries are converted before comparing. |
 | `measurement_system` | list        | `imperial`         | Default unit pickers in the UI: `imperial` (°F, lb/oz, in) or `metric` (°C, kg, cm). The unit is stored per entry, so this only changes the defaults. |
 | `language`       | list            | `auto`             | UI + Baby Remote language (`auto`, `en`, `nl`, `es`, `fr`). `auto` lets **each browser** follow its own language. **This option is also the only control for the Baby Remote's OLED text**, which is built server-side: the in-app picker cannot move it, because one remote serves the whole household. Under `auto` the device shows English. See [Languages](#languages). |
+| `hidden_modules` | list (opt.)     | `[]`               | Modules to **hide** in the web UI. Empty (the default) shows everything. See [Hiding modules you do not use](#hiding-modules-you-do-not-use). |
 | `summary_enabled` | bool          | `false`            | The AI daily summary in the summary card. **Off by default (opt-in)** — turn it on to get a warm plain-language recap. When enabled it sends only a de-identified digest (counts/trends, never names or notes) to the chosen provider (hosted proxy by default). |
-| `summary_provider` | list         | `hosted`           | LLM backend: `hosted` proxy (default, `babytracker.shmaestro.com`), your own `ollama`, or `anthropic` / `openai` / `gemini`. |
+| `summary_provider` | list         | `hosted`           | LLM backend: `hosted` proxy (default, `babytracker.shmaestro.com`), your own `ollama`, or `anthropic` / `openai` / `gemini`. Pick `openai` for **any OpenAI-compatible service** and set `summary_openai_url`. |
 | `summary_hour` | int (0-23)       | `6`                | Local hour for the automatic daily digest. `0` = on-demand only. |
 | `summary_daily_cap` | int         | `2`                | Max summaries per day (auto + on-demand combined). |
 | `summary_hosted_url` | string      | `""`               | Base URL of the hosted summary proxy (when provider is `hosted`). |
 | `summary_ollama_url` | string      | `http://192.168.2.5:11434` | Your Ollama server (when provider is `ollama`). |
+| `summary_openai_url` | string (opt.) | `""`             | Base URL for the `openai` provider. Blank = OpenAI itself. Set it to use any OpenAI-compatible service. See [Using an OpenAI-compatible service](#using-an-openai-compatible-service). |
 | `summary_model` | string          | `gpt-oss:120b-cloud` | Model name for the chosen provider. |
 | `summary_api_key` | password      | `""`               | API key for `anthropic` / `openai` / `gemini`. |
 | `summary_prompt` | string         | (built-in)         | The recap instruction — pre-filled and editable. The de-identified digest is always appended by the add-on, so edits change tone, not what data is sent. |
@@ -74,6 +76,64 @@ timezone: America/New_York
 pump_hours: 2.5
 database_url: ""
 ```
+
+## Hiding modules you do not use
+
+Not every household needs every part of the app. Once the baby is home the
+Contractions and Get Ready tabs have done their job; if you only breastfeed, the
+Bottle and Solid buttons are just something to mis-tap. `hidden_modules` takes
+any number of entries and removes them from the web UI:
+
+```yaml
+hidden_modules:
+  - tab.get_ready
+  - tab.contractions
+  - feed.bottle
+  - feed.solid
+  - sleep
+```
+
+| Entry | Hides |
+|-------|-------|
+| `tab.get_ready`, `tab.contractions`, `tab.health`, `tab.growth`, `tab.supplies` | A whole tab, and its figure in the summary card |
+| `group.feed`, `group.pump`, `group.diaper`, `group.other` | A button group on the Baby tab, heading included |
+| `feed.breast`, `feed.bottle`, `feed.solid` | One feed button |
+| `pump.left`, `pump.right` | One pump button |
+| `diaper.pee`, `diaper.poop`, `diaper.both`, `diaper.change` | One diaper button |
+| `sleep`, `bath`, `medicine`, `tummy_time` | One button in the Other group (`sleep` covers both Start and End) |
+| `card.summary` | The AI daily summary block |
+| `card.manual` | The "Add / backfill an event" card |
+
+Notes:
+
+- **The Baby tab cannot be hidden.** Something has to stay navigable.
+- **Nothing is deleted.** Hiding is presentation only: entries you already
+  logged still show in the journal, and the API and MQTT keep accepting hidden
+  event types, so the **Baby Remote and any existing automations keep working**.
+  Remove the entry and everything reappears exactly as before.
+- A group whose buttons are all hidden loses its heading too.
+- If `default_tab` points at a hidden tab, the app opens on Baby instead.
+
+## Using an OpenAI-compatible service
+
+With `summary_provider: openai`, `summary_openai_url` sets where the request
+goes. Leave it blank for OpenAI itself. Because most LLM services now speak the
+OpenAI chat-completions format, this one option covers nearly all of them:
+
+| Service | `summary_openai_url` | Example `summary_model` |
+|---------|----------------------|-------------------------|
+| OpenAI | *(blank)* | `gpt-4o-mini` |
+| OpenRouter | `https://openrouter.ai/api/v1` | `meta-llama/llama-3.3-70b-instruct` |
+| Ollama (local) | `http://homeassistant.local:11434/v1` | `llama3.2:3b` |
+| Ollama Cloud | `https://ollama.com/v1` | `gpt-oss:120b-cloud` |
+| Groq | `https://api.groq.com/openai/v1` | `llama-3.3-70b-versatile` |
+| LM Studio | `http://<host>:1234/v1` | whatever you loaded |
+| LiteLLM / vLLM | `http://<host>:<port>/v1` | your served model id |
+
+Set `summary_api_key` to that service's key (local Ollama and LM Studio ignore
+it, so any placeholder works). The URL is forgiving: with or without the
+trailing `/v1`, with or without a trailing slash, and a full
+`.../v1/chat/completions` pasted from the docs all resolve to the same call.
 
 ## Languages
 
