@@ -94,6 +94,10 @@ def compute(rows: list[dict], timezone: str = "America/New_York",
         "sleep_total_today": f"{sleep_min // 60}h {sleep_min % 60}m",
         "sleep_min_today": sleep_min,
         "is_sleeping": is_sleeping,
+        # last sleep event time (start when currently asleep, else end) so HA can
+        # render a live "X ago" timestamp sensor for sleep like feed/diaper do.
+        "last_sleep_at": latest_sleep["logged_at"] if latest_sleep else None,
+        "last_sleep_type": (latest_sleep.get("event_subtype") if latest_sleep else None),
         "baths_today": len(baths_today),
         "medicines_today": len(medicines_today),
         "tummy_times_today": len(tummy_today),

@@ -1,5 +1,15 @@
 # Changelog
 
+## 2026.4.14 - 2026-08-16
+
+- **added: `Last Sleep` timestamp sensor.** `baby/state` now includes
+  `last_sleep_at` (and `last_sleep_type`) from the most recent sleep event —
+  start time while the baby is asleep, otherwise the last end time. A new
+  auto-discovered `sensor.baby_tracker_last_sleep` (device_class `timestamp`)
+  renders a live "X ago", matching the existing Last Feed / Last Diaper sensors.
+  Previously sleep was only exposed as `is_sleeping` + `sleep_total_today`, so
+  dashboards had no real last-sleep time to bind to.
+
 ## 2026.4.13 - 2026-08-12
 
 - **added: hide the modules you do not use (discussion #8).** A new

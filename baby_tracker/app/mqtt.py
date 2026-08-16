@@ -64,6 +64,7 @@ DEVICE = {
 SENSORS = [
     ("last_feed", "Last Feed", "{% if value_json.last_feed_at %}{{ value_json.last_feed_at }}{% endif %}", None, "timestamp"),
     ("last_diaper", "Last Diaper", "{% if value_json.last_diaper_at %}{{ value_json.last_diaper_at }}{% endif %}", None, "timestamp"),
+    ("last_sleep", "Last Sleep", "{% if value_json.last_sleep_at %}{{ value_json.last_sleep_at }}{% endif %}", None, "timestamp"),
     ("feeds_today", "Feeds Today", "{{ value_json.feeds_today }}", None, None),
     ("diapers_today", "Diapers Today", "{{ value_json.diapers_today }}", None, None),
     ("sleep_today", "Sleep Today", "{{ value_json.sleep_total_today }}", None, None),
