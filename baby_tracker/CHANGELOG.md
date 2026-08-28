@@ -1,5 +1,21 @@
 # Changelog
 
+## 2026.4.15 - 2026-08-28
+
+- **added: a 24-hour clock (issue #10).** A new `time_format` option switches
+  every time the app prints from `8:30 PM` to `20:30`. It applies **everywhere
+  at once**: the journal, the Health and Growth tabs, Home Assistant
+  notifications, pump and feed reminders, the MQTT sensor attributes and the AI
+  summary card. Default is `12h`, so an install that never opens the option page
+  sees exactly what it saw before.
+- Note there is **no per-browser toggle**, unlike the language picker. The
+  journal's timestamp and the notification text are both built server-side, so a
+  browser-side pick could move the first and never the second, and the same event
+  would read `20:30` in the app and `8:30 PM` in the notification.
+- **fixed: the contraction assessment's time had a stray leading zero.** It
+  printed `02:05 PM` where the journal and notifications print `1:05 PM`
+  (issue #2). All five clocks now come from one helper, so they agree.
+
 ## 2026.4.14 - 2026-08-16
 
 - **added: `Last Sleep` timestamp sensor.** `baby/state` now includes

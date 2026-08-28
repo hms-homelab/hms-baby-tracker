@@ -28,6 +28,7 @@ from .db import Database, EXPORT_TABLES
 from .mqtt import MqttBridge
 from .scheduler import Reminders
 from .stats import compute
+from .timefmt import normalize as normalize_time_format
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(levelname)s %(message)s")
 log = logging.getLogger("baby")
@@ -128,7 +129,7 @@ class ChecklistPatch(BaseModel):
 
 def create_app(cfg: Config | None = None) -> FastAPI:
     cfg = cfg or Config.load()
-    db = Database(cfg.db_path, cfg.timezone, cfg.database_url)
+    db = Database(cfg.db_path, cfg.timezone, cfg.database_url, cfg.time_format)
     mqtt = MqttBridge(cfg, db)
     reminders = Reminders(cfg, mqtt=mqtt, db=db)
 
@@ -377,6 +378,7 @@ def create_app(cfg: Config | None = None) -> FastAPI:
                 "measurement_system": system, "summary_enabled": cfg.summary_enabled,
                 "timezone": cfg.timezone, "language": cfg.language,
                 "hidden_modules": hidden,
+                "time_format": normalize_time_format(cfg.time_format),
                 "addon_slug": await addon_slug()}
 
     # --- AI daily summary (SDD-003) ---------------------------------------

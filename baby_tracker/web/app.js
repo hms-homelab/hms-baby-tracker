@@ -101,6 +101,7 @@
   var generatingSummary = false; // AI summary in flight (don't clobber the button)
   var addonSlug = "";           // this add-on's Supervisor slug (config deep link)
   var appTz = "";               // add-on's IANA timezone (anchors the datetime pickers)
+  var timeFmt = "12h";          // from /api/config time_format ("12h" | "24h")
   var PANELS = { get_ready: 1, baby: 1, contractions: 1, health: 1, growth: 1, supplies: 1 };
 
   // --- Module visibility (SDD-005) ----------------------------------------
@@ -582,10 +583,14 @@
   }
 
   // --- AI daily summary ---------------------------------------------------
+  // Mirrors app/timefmt.py `clock()` (SDD-006). This is the ONE clock the SPA
+  // formats itself; every other time on screen arrives pre-formatted from the
+  // server, which is why 24h is an add-on option and not a per-browser toggle.
   function fmtClock(iso) {
     var d = new Date(iso);
     if (isNaN(d.getTime())) return "";
-    var m = (d.getMinutes() < 10 ? "0" : "") + d.getMinutes();
+    var m = pad(d.getMinutes());
+    if (timeFmt === "24h") return pad(d.getHours()) + ":" + m;
     return (d.getHours() % 12 || 12) + ":" + m + (d.getHours() >= 12 ? " PM" : " AM");
   }
   function loadSummary() {
@@ -1455,6 +1460,7 @@
         if (c && c.hidden_modules) {
           c.hidden_modules.forEach(function (id) { hidden[id] = 1; });
         }
+        if (c && c.time_format === "24h") timeFmt = "24h";
         return I18N.boot(c && c.language);
       })
       .catch(function () { /* catalogs unreachable: fall through on English */ })

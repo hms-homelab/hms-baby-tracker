@@ -21,6 +21,7 @@ from zoneinfo import ZoneInfo
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
 from . import display, i18n, supplies
+from .timefmt import clock
 
 log = logging.getLogger("baby.scheduler")
 
@@ -106,7 +107,8 @@ class Reminders:
 
     def _now(self) -> tuple[dt.datetime, str]:
         now = dt.datetime.now(dt.timezone.utc)
-        local = now.astimezone(ZoneInfo(self.cfg.timezone)).strftime("%-I:%M %p")
+        local = clock(now.astimezone(ZoneInfo(self.cfg.timezone)),
+                      getattr(self.cfg, "time_format", "12h"))
         return now, local
 
     @staticmethod

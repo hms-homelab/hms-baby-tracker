@@ -33,6 +33,8 @@ from zoneinfo import ZoneInfo
 
 import httpx
 
+from .timefmt import clock
+
 log = logging.getLogger("baby.assessment")
 
 SUPERVISOR_CORE = "http://supervisor/core/api"
@@ -63,10 +65,15 @@ def _parse(iso: str) -> dt.datetime:
     return d
 
 
-def _local_time(tz: ZoneInfo, now: dt.datetime | None = None) -> str:
-    """Mirror the n8n localTime: en-US 12h '02:05 PM' in the configured tz."""
+def _local_time(tz: ZoneInfo, now: dt.datetime | None = None,
+                time_format: str = "12h") -> str:
+    """Wall clock in the configured tz, styled by `time_format` (SDD-006).
+
+    The n8n original used `%I:%M %p`, which kept a leading zero ('02:05 PM')
+    that the rest of the app had already dropped for issue #2. Going through
+    `clock()` lines this up with the journal and the notifications."""
     now = now or dt.datetime.now(dt.timezone.utc)
-    return now.astimezone(tz).strftime("%I:%M %p")
+    return clock(now.astimezone(tz), time_format)
 
 
 def _intensity_of(row: dict) -> str | None:
@@ -79,14 +86,15 @@ def _intensity_of(row: dict) -> str | None:
 
 def build_prompt(recent: list[dict], tz: ZoneInfo,
                  now: dt.datetime | None = None,
-                 prompt_override: str | None = None) -> dict:
+                 prompt_override: str | None = None,
+                 time_format: str = "12h") -> dict:
     """Port of the n8n "Build Prompt" node.
 
     `recent` is most-recent-first contraction rows (each with `logged_at` and
     optionally `event_subtype`/`note` carrying an intensity). Returns
     {skip, prompt|assessment, localTime}.
     """
-    local_time = _local_time(tz, now)
+    local_time = _local_time(tz, now, time_format)
     if len(recent) < 2:
         return {"skip": True, "assessment": NO_DATA_MSG, "localTime": local_time}
 
@@ -187,7 +195,8 @@ async def maybe_assess(cfg, db, mqtt=None, now: dt.datetime | None = None) -> di
     try:
         recent = await _recent_contractions(db, tz, now=now)
         built = build_prompt(recent, tz, now=now,
-                             prompt_override=getattr(cfg, "ollama_prompt", None) or None)
+                             prompt_override=getattr(cfg, "ollama_prompt", None) or None,
+                             time_format=getattr(cfg, "time_format", "12h"))
         if built["skip"]:
             assessment = built["assessment"]
         else:

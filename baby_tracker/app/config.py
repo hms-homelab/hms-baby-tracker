@@ -64,6 +64,11 @@ class Config:
     # UI unit defaults: "imperial" (°F, lb/oz, in) or "metric" (°C, kg, cm).
     # Per-entry unit is still stored, so this only sets the default pickers.
     measurement_system: str = "imperial"
+    # Clock style for every time the app prints (SDD-006): "12h" (8:30 PM) or
+    # "24h" (20:30). Install-wide rather than per-browser, because the journal's
+    # `time` string is built server-side in db.py and the notification/reminder
+    # text is too, so a browser pick could not move either.
+    time_format: str = "12h"
     # UI + Baby Remote language (SDD-004). "auto" lets each browser follow its
     # own Accept-Language; any catalog code (en, nl, es, fr) forces it. NOTE
     # this is also the ONLY control for the device's OLED text, which is
@@ -132,6 +137,7 @@ class Config:
                                              env.get("FEVER_THRESHOLD_C", 38.0))),
             measurement_system=(opts.get("measurement_system")
                                 or env.get("MEASUREMENT_SYSTEM") or "imperial"),
+            time_format=(opts.get("time_format") or env.get("TIME_FORMAT") or "12h"),
             language=(opts.get("language") or env.get("LANGUAGE") or "auto"),
             hidden_modules=_as_list(opts.get("hidden_modules")
                                     or env.get("HIDDEN_MODULES")),

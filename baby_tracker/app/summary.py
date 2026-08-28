@@ -14,6 +14,7 @@ from zoneinfo import ZoneInfo
 
 from . import display, i18n, llm
 from .stats import compute
+from .timefmt import clock
 
 log = logging.getLogger("baby.summary")
 
@@ -68,9 +69,8 @@ def _day(cfg, now: dt.datetime) -> str:
 
 
 def _local_time(cfg, now: dt.datetime) -> str:
-    t = now.astimezone(ZoneInfo(cfg.timezone))
-    h = t.hour % 12 or 12
-    return f"{h}:{t.minute:02d} {'PM' if t.hour >= 12 else 'AM'}"
+    return clock(now.astimezone(ZoneInfo(cfg.timezone)),
+                 getattr(cfg, "time_format", "12h"))
 
 
 async def build_digest(db, cfg, now: dt.datetime | None = None) -> dict:

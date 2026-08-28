@@ -1,5 +1,5 @@
 name: Baby Tracker
-version: "2026.4.14"
+version: "2026.4.15"
 slug: baby_tracker
 description: Track feeds, diapers, sleep, pumping and more — with an Ingress web UI, an ESP32 button remote over MQTT, and native Home Assistant entities.
 url: https://github.com/hms-homelab/hms-baby-tracker
@@ -31,6 +31,7 @@ options:
   checklist_reset_hour: 0
   fever_threshold_c: 38.0
   measurement_system: imperial
+  time_format: 12h
   language: auto
   hidden_modules: []
   summary_enabled: false
@@ -68,6 +69,11 @@ schema:
   fever_threshold_c: float
   # Default UI units: imperial (°F, lb/oz, in) or metric (°C, kg, cm).
   measurement_system: list(imperial|metric)
+  # Clock style for logged times, reminders and notifications. 12h = "8:30 PM",
+  # 24h = "20:30". Applies everywhere at once (journal, Home Assistant
+  # notifications, reminders, MQTT sensors, AI summary), because those times are
+  # rendered server-side and cannot follow a per-browser pick.
+  time_format: list(12h|24h)
   # UI + Baby Remote language. "auto" lets each browser follow its own language;
   # a code (en|nl|es|fr) forces it. This option is ALSO the only control for the
   # Baby Remote's OLED text, which is built server-side, so a per-browser pick in

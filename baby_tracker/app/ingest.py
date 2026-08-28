@@ -9,6 +9,8 @@ from __future__ import annotations
 import datetime as dt
 from zoneinfo import ZoneInfo
 
+from .timefmt import clock
+
 ICONS = {
     "feed": "🍼",
     "diaper": "🧷",
@@ -37,11 +39,13 @@ def _fmt_value(value: float | None, unit: str | None) -> str:
 
 def format_event(event_type: str, event_subtype: str | None, note: str | None,
                  when: dt.datetime, timezone: str,
-                 value: float | None = None, value_unit: str | None = None) -> tuple[str, str]:
+                 value: float | None = None, value_unit: str | None = None,
+                 time_format: str = "12h") -> tuple[str, str]:
     """Return (title, message) exactly like the n8n Format Event node.
 
     A numeric `value` (temperature/weight/length/head_circumference) is appended
-    to both the title `(4.2 kg)` and, on its own line, the message."""
+    to both the title `(4.2 kg)` and, on its own line, the message.
+    `time_format` styles the clock in the message (SDD-006)."""
     icon = ICONS.get(event_type, "📝")
     display = event_type.replace("_", " ")
     title = f"{icon} {display[:1].upper()}{display[1:]}"
@@ -51,11 +55,7 @@ def format_event(event_type: str, event_subtype: str | None, note: str | None,
     if val_str:
         title += f" {val_str}"
     ny = when.astimezone(ZoneInfo(timezone))
-    h = ny.hour
-    ampm = "PM" if h >= 12 else "AM"
-    h12 = h % 12 or 12
-    time_str = f"{h12}:{ny.minute:02d} {ampm}"
-    message = f"{title} at {time_str}"
+    message = f"{title} at {clock(ny, time_format)}"
     if note:
         message += f"\n{note}"
     return title, message
@@ -92,7 +92,8 @@ async def create_event(db, cfg, event_type: str, event_subtype: str | None = Non
     when = _parse(logged_at) if logged_at else dt.datetime.now(dt.timezone.utc)
     logged_at = when.isoformat()
     title, message = format_event(event_type, event_subtype, note, when, cfg.timezone,
-                                  value, value_unit)
+                                  value, value_unit,
+                                  getattr(cfg, "time_format", "12h"))
 
     row_id = await db.insert_event(event_type, event_subtype, note, logged_at,
                                    value, value_unit)

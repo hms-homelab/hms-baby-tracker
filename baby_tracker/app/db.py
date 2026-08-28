@@ -18,8 +18,7 @@ import datetime as dt
 from urllib.parse import urlparse
 from zoneinfo import ZoneInfo
 
-# Matches the Postgres to_char(... 'HH12:MI AM, Mon DD') used by the n8n log API.
-_TIME_FMT = "%I:%M %p, %b %d"
+from .timefmt import clock, normalize
 
 # Sentinel for partial updates: distinguishes "leave unchanged" from "set NULL".
 _UNSET = object()
@@ -85,7 +84,11 @@ def _now_iso() -> str:
     return dt.datetime.now(dt.timezone.utc).isoformat()
 
 
-def _fmt_time(iso: str, tz: ZoneInfo) -> str:
+def _fmt_time(iso: str, tz: ZoneInfo, time_format: str = "12h") -> str:
+    """Journal timestamp: "7:42 PM, Aug 28" or, under 24h, "19:42, Aug 28".
+
+    Only the clock half follows `time_format` (SDD-006); the date half is the
+    same either way."""
     try:
         d = dt.datetime.fromisoformat(iso.replace("Z", "+00:00"))
     except ValueError:
@@ -93,10 +96,7 @@ def _fmt_time(iso: str, tz: ZoneInfo) -> str:
     if d.tzinfo is None:
         d = d.replace(tzinfo=dt.timezone.utc)
     d = d.astimezone(tz)
-    # 12h clock WITHOUT a leading zero on the hour (issue #2: "7:42 PM", not "07:42 PM").
-    h12 = d.hour % 12 or 12
-    ampm = "PM" if d.hour >= 12 else "AM"
-    return f"{h12}:{d.minute:02d} {ampm}, {d.strftime('%b %d')}"
+    return f"{clock(d, time_format)}, {d.strftime('%b %d')}"
 
 
 def _is_postgres(url: str | None) -> bool:
@@ -106,16 +106,17 @@ def _is_postgres(url: str | None) -> bool:
     return scheme in ("postgres", "postgresql", "postgresql+asyncpg")
 
 
-def Database(path=None, timezone: str = "America/New_York", database_url: str | None = None):
+def Database(path=None, timezone: str = "America/New_York", database_url: str | None = None,
+             time_format: str = "12h"):
     """Factory returning the right backend.
 
     Back-compat: existing callers do `Database(cfg.db_path, cfg.timezone)`. When
     `database_url` is a postgres URL we return the Postgres backend instead and
-    ignore `path`.
+    ignore `path`. `time_format` styles the `time` field on returned rows.
     """
     if _is_postgres(database_url):
-        return PostgresDatabase(database_url, timezone)
-    return SqliteDatabase(path, timezone)
+        return PostgresDatabase(database_url, timezone, time_format)
+    return SqliteDatabase(path, timezone, time_format)
 
 
 # ---------------------------------------------------------------------------
@@ -176,9 +177,10 @@ CREATE INDEX IF NOT EXISTS idx_baby_summaries_day ON baby_summaries (day);
 
 
 class SqliteDatabase:
-    def __init__(self, path, timezone: str = "America/New_York"):
+    def __init__(self, path, timezone: str = "America/New_York", time_format: str = "12h"):
         self.path = str(path)
         self.tz = ZoneInfo(timezone)
+        self.time_fmt = normalize(time_format)
 
     async def init(self) -> None:
         import aiosqlite
@@ -242,7 +244,7 @@ class SqliteDatabase:
         out = []
         for r in rows:
             d = _clean_row(dict(r))
-            d["time"] = _fmt_time(d["logged_at"], self.tz)
+            d["time"] = _fmt_time(d["logged_at"], self.tz, self.time_fmt)
             out.append(d)
         return out
 
@@ -274,7 +276,7 @@ class SqliteDatabase:
             rows = await cur.fetchall()
         out = [_clean_row(dict(r)) for r in rows]
         for d in out:
-            d["time"] = _fmt_time(d["logged_at"], self.tz)
+            d["time"] = _fmt_time(d["logged_at"], self.tz, self.time_fmt)
         out.reverse()
         return out
 
@@ -671,9 +673,11 @@ def _normalize_pg_url(url: str) -> str:
 
 
 class PostgresDatabase:
-    def __init__(self, database_url: str, timezone: str = "America/New_York"):
+    def __init__(self, database_url: str, timezone: str = "America/New_York",
+                 time_format: str = "12h"):
         self.dsn = _normalize_pg_url(database_url)
         self.tz = ZoneInfo(timezone)
+        self.time_fmt = normalize(time_format)
         self._pool = None
 
     async def _get_pool(self):
@@ -737,7 +741,7 @@ class PostgresDatabase:
         out = []
         for r in rows:
             d = self._row_to_dict(r)
-            d["time"] = _fmt_time(d["logged_at"], self.tz)
+            d["time"] = _fmt_time(d["logged_at"], self.tz, self.time_fmt)
             out.append(d)
         return out
 
@@ -764,7 +768,7 @@ class PostgresDatabase:
         out = []
         for r in rows:
             d = self._row_to_dict(r)
-            d["time"] = _fmt_time(d["logged_at"], self.tz)
+            d["time"] = _fmt_time(d["logged_at"], self.tz, self.time_fmt)
             out.append(d)
         out.reverse()
         return out
