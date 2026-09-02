@@ -18,20 +18,28 @@ import datetime as dt
 from urllib.parse import urlparse
 from zoneinfo import ZoneInfo
 
+from . import i18n
 from .timefmt import clock, normalize
 
 # Sentinel for partial updates: distinguishes "leave unchanged" from "set NULL".
 _UNSET = object()
 
-# Get Ready tab: popular prep suggestions seeded on first run (all editable).
+# Get Ready tab: popular prep suggestions seeded when the table is first
+# created (all editable). Catalog keys, so the seeds follow the `language`
+# option instead of always arriving in English.
 DEFAULT_CHECKLIST = [
-    "Crib",
-    "Diaper bag",
-    "Newborn clothes",
-    "Bottles",
-    "Wipes + cream",
-    "Car seat installed",
+    "ready.seed.crib",
+    "ready.seed.diaperBag",
+    "ready.seed.clothes",
+    "ready.seed.bottles",
+    "ready.seed.wipes",
+    "ready.seed.carSeat",
 ]
+
+
+def default_checklist(lang: str = "en", data_dir=None) -> list[str]:
+    """The seed labels, translated."""
+    return [i18n.t(key, lang, data_dir) for key in DEFAULT_CHECKLIST]
 
 # Editable columns of baby_supplies (order used by insert/row mapping).
 SUPPLY_FIELDS = (
@@ -182,10 +190,17 @@ class SqliteDatabase:
         self.tz = ZoneInfo(timezone)
         self.time_fmt = normalize(time_format)
 
-    async def init(self) -> None:
+    async def init(self, seed: list[str] | None = None) -> None:
         import aiosqlite
 
         async with aiosqlite.connect(self.path) as db:
+            # Seed the Get Ready list only when THIS init creates the table.
+            # Seeding whenever it was empty put the six defaults back on every
+            # restart after a parent had deleted them all (issue #9).
+            cur = await db.execute(
+                "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'baby_checklist'"
+            )
+            fresh = await cur.fetchone() is None
             await db.executescript(SQLITE_SCHEMA)
             # Migration: add numeric value columns to a pre-existing baby_events
             # (SQLite has no ADD COLUMN IF NOT EXISTS — check PRAGMA first).
@@ -195,15 +210,13 @@ class SqliteDatabase:
                 await db.execute("ALTER TABLE baby_events ADD COLUMN value REAL")
             if "value_unit" not in cols:
                 await db.execute("ALTER TABLE baby_events ADD COLUMN value_unit TEXT")
-            # Seed the Get Ready checklist on a fresh install (only when empty).
-            cur = await db.execute("SELECT COUNT(*) FROM baby_checklist")
-            (count,) = await cur.fetchone()
-            if not count:
+            if fresh:
                 now = _now_iso()
+                labels = default_checklist() if seed is None else seed
                 await db.executemany(
                     "INSERT INTO baby_checklist (label, position, updated_at) "
                     "VALUES (?, ?, ?)",
-                    [(label, i, now) for i, label in enumerate(DEFAULT_CHECKLIST)],
+                    [(label, i, now) for i, label in enumerate(labels)],
                 )
             await db.commit()
 
@@ -687,17 +700,20 @@ class PostgresDatabase:
             self._pool = await asyncpg.create_pool(self.dsn, min_size=1, max_size=5)
         return self._pool
 
-    async def init(self) -> None:
+    async def init(self, seed: list[str] | None = None) -> None:
         pool = await self._get_pool()
         async with pool.acquire() as con:
+            # Same rule as SQLite: seed only when this init creates the table,
+            # never merely because it is empty (issue #9).
+            fresh = await con.fetchval("SELECT to_regclass('baby_checklist')") is None
             await con.execute(PG_SCHEMA)
-            count = await con.fetchval("SELECT COUNT(*) FROM baby_checklist")
-            if not count:
+            if fresh:
                 now = _now_iso()
+                labels = default_checklist() if seed is None else seed
                 await con.executemany(
                     "INSERT INTO baby_checklist (label, position, updated_at) "
                     "VALUES ($1, $2, $3)",
-                    [(label, i, now) for i, label in enumerate(DEFAULT_CHECKLIST)],
+                    [(label, i, now) for i, label in enumerate(labels)],
                 )
 
     async def insert_event(

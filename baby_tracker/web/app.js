@@ -246,6 +246,21 @@
   }
   function fmtType(t) { return t ? " (" + t + ")" : ""; }
 
+  // Subtypes are stored as English tokens ("bottle", "both", "mild") and were
+  // printed raw in the summary card and the journal (issue #9). Route them
+  // through the labels every catalog already carries; an unknown token still
+  // prints as-is rather than as a key.
+  var SUBTYPE_KEY = {
+    feed: { breast: "btn.breast", bottle: "btn.bottle", solid: "btn.solid" },
+    diaper: { pee: "btn.pee", poop: "btn.poop", both: "btn.both", change: "btn.change" },
+    contraction: { mild: "ctx.mild", medium: "ctx.medium", intense: "ctx.intense" },
+  };
+  function subtypeLabel(type, sub) {
+    if (!sub) return "";
+    var key = SUBTYPE_KEY[type] && SUBTYPE_KEY[type][sub];
+    return key ? t(key) : sub;
+  }
+
   // Any auxiliary stat (pumps, baths, contractions, temp, ...) can be tapped
   // to "pin" it up into the same big stat-card format as Last feed / Last
   // diaper / Asleep, or tapped again to send it back down into the chip tray.
@@ -336,11 +351,11 @@
     document.getElementById("sum-feed-val").textContent =
       fmtAgo(stats.last_feed_min) + fmtAgoSuffix(stats.last_feed_min);
     document.getElementById("sum-feed-sub").textContent =
-      (stats.last_feed_type ? stats.last_feed_type + " · " : "") + t("sum.today", { n: stats.feeds_today });
+      (stats.last_feed_type ? subtypeLabel("feed", stats.last_feed_type) + " · " : "") + t("sum.today", { n: stats.feeds_today });
     document.getElementById("sum-diaper-val").textContent =
       fmtAgo(stats.last_diaper_min) + fmtAgoSuffix(stats.last_diaper_min);
     document.getElementById("sum-diaper-sub").textContent =
-      (stats.last_diaper_type ? stats.last_diaper_type + " · " : "") + t("sum.today", { n: stats.diapers_today });
+      (stats.last_diaper_type ? subtypeLabel("diaper", stats.last_diaper_type) + " · " : "") + t("sum.today", { n: stats.diapers_today });
 
     // Sleep: state (asleep/awake) + how long that state has lasted, computed
     // from the most recent sleep start/end in the journal (entries are
@@ -440,7 +455,10 @@
       if (sub === "solid") return "🍎 " + t("journal.solidFood");
       return "🍼 " + t("journal.feed") + fmtType(sub);
     }
-    if (type === "contraction") return "⏱️ " + t("journal.contraction") + fmtType(sub);
+    if (type === "contraction") return "⏱️ " + t("journal.contraction") + fmtType(subtypeLabel("contraction", sub));
+    if (type === "bath") return "🛁 " + t("journal.bath");
+    if (type === "medicine") return "💊 " + t("journal.medicine");
+    if (type === "tummy_time") return "🤸 " + t("journal.tummy");
     if (type === "supply") return "🧴 " + t("journal.supply") + fmtType(sub);
     if (type === "temperature") return "🌡️ " + t("journal.temperature") + fmtValue(e.value, e.value_unit);
     if (type === "weight") return "⚖️ " + t("journal.weight") + " " + fmtMeasure(e.value, e.value_unit);

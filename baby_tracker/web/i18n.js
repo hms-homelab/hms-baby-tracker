@@ -105,6 +105,11 @@
       });
     },
 
+    /* Forget a fetched catalog so the next load() refetches it. load() memoises,
+     * so without this the editor's Save would leave the page rendering the
+     * catalog it fetched at boot. */
+    invalidate: function (code) { delete catalogs[code]; },
+
     /* Raw lookup with the en fallback chain. Returns null when the key is
      * unknown everywhere, so t() can warn once and echo the key. */
     lookup: function (key) {

@@ -1,5 +1,28 @@
 # Changelog
 
+## 2026.4.16 - 2026-09-02
+
+Five fixes from the Dutch testing on issue #9 (thanks @mkampstra).
+
+- **fixed: the translation editor's edits never reached the web UI.** Save
+  wrote them to `/data`, the editor showed them as in effect, and the app kept
+  the shipped text, because the browser loaded the catalog straight from the
+  image. The catalog files are now served from the merged view, and the page
+  drops its cached copy after a Save or Revert, so the UI updates in place as
+  the docs always said it would.
+- **fixed: Last feed and Last diaper printed the raw subtype** (`bottle`,
+  `both`, `pee`) in every language. They now use the same labels as the
+  buttons.
+- **fixed: journal rows for Bath, Medicine and Tummy time were always English**,
+  and contraction rows appended the raw intensity (`mild`). Four new catalog
+  keys, translated in all four languages.
+- **fixed: the Get Ready list came back after a restart.** The six starter
+  items were re-seeded whenever the list was empty, so deleting them all only
+  held until the add-on next started. Seeding now happens once, when the table
+  is first created.
+- **changed: the Get Ready starter items follow the `language` option** instead
+  of always arriving in English. Existing installs keep their current list.
+
 ## 2026.4.15 - 2026-08-28
 
 - **added: a 24-hour clock (issue #10).** A new `time_format` option switches

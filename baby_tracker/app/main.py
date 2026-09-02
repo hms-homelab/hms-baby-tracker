@@ -22,9 +22,9 @@ from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from . import assessment, i18n, ingest, llm, summary, supplies
+from . import assessment, display, i18n, ingest, llm, summary, supplies
 from .config import Config
-from .db import Database, EXPORT_TABLES
+from .db import Database, EXPORT_TABLES, default_checklist
 from .mqtt import MqttBridge
 from .scheduler import Reminders
 from .stats import compute
@@ -246,7 +246,9 @@ def create_app(cfg: Config | None = None) -> FastAPI:
     @contextlib.asynccontextmanager
     async def lifespan(app: FastAPI):
         cfg.data_dir.mkdir(parents=True, exist_ok=True)
-        await db.init()
+        # The Get Ready seeds follow the `language` option (English under
+        # "auto"): a Dutch household should not start with "Car seat installed".
+        await db.init(seed=default_checklist(display.device_lang(cfg), cfg.data_dir))
         reminders.start()
         # Daily AI summary cron (SDD-003) — only when enabled and scheduled.
         if cfg.summary_enabled and int(cfg.summary_hour) > 0:
@@ -621,6 +623,20 @@ def create_app(cfg: Config | None = None) -> FastAPI:
             data,
             headers={"Content-Disposition": f'attachment; filename="{lang}.json"'},
         )
+
+    # The SPA fetches its catalogs as plain files ("i18n/nl.json"). They have to
+    # come from the MERGED view: the file under web/i18n/ is the shipped
+    # catalog and never carries the /data overrides, so an editor Save was
+    # visible in the editor and nowhere else (issue #9). index.json has no
+    # override layer and is answered from the registry.
+    @app.get("/i18n/{lang}.json")
+    async def i18n_catalog_file(lang: str):
+        if lang == "index":
+            return JSONResponse(i18n.registry(), headers={"Cache-Control": "no-cache"})
+        if lang not in i18n.available():
+            return JSONResponse({"ok": False, "error": "unknown_language"}, status_code=404)
+        return JSONResponse(i18n.load(lang, cfg.data_dir),
+                            headers={"Cache-Control": "no-cache"})
 
     if WEB_DIR.is_dir():
         app.mount("/", NoCacheStaticFiles(directory=str(WEB_DIR), html=True), name="web")

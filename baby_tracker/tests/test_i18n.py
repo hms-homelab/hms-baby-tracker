@@ -181,7 +181,7 @@ def test_no_orphaned_catalog_keys():
     blob = "".join((WEB / f).read_text(encoding="utf-8")
                    for f in ("app.js", "editor.js", "index.html"))
     py = "".join((Path(__file__).resolve().parent.parent / "app" / f).read_text(encoding="utf-8")
-                 for f in ("display.py", "scheduler.py", "i18n.py"))
+                 for f in ("display.py", "scheduler.py", "i18n.py", "db.py"))
     orphans = []
     for k in sorted(en):
         if k.endswith(("_one", "_other")):
@@ -272,6 +272,24 @@ def test_save_then_read_back(client, tmp_path):
     rows = {row["key"]: row for row in client.get("/api/i18n/catalog?lang=nl").json()["rows"]}
     assert rows["sum.asleep"]["override"] == "Pitten"
     assert rows["sum.asleep"]["effective"] == "Pitten"
+
+
+def test_spa_catalog_file_carries_overrides(client):
+    """Issue #9: the browser loads i18n/<lang>.json. That file must be the
+    merged view, or a Save shows up in the editor and nowhere else."""
+    assert client.get("/i18n/nl.json").json()["tab.health"] == "Gezondheid"
+    client.put("/api/i18n/nl", json={"overrides": {"tab.health": "Gezond"}})
+    r = client.get("/i18n/nl.json")
+    assert r.status_code == 200
+    assert r.headers["cache-control"] == "no-cache"
+    assert r.json()["tab.health"] == "Gezond"
+    # Revert drops it again, and the untouched language is unaffected.
+    client.delete("/api/i18n/nl")
+    assert client.get("/i18n/nl.json").json()["tab.health"] == "Gezondheid"
+    assert client.get("/i18n/en.json").json()["tab.health"] == "Health"
+    # The registry still answers at its old path, and unknown codes 404.
+    assert [e["code"] for e in client.get("/i18n/index.json").json()][0] == "en"
+    assert client.get("/i18n/zz.json").status_code == 404
 
 
 def test_revert_single_key_and_all(client):

@@ -9,7 +9,7 @@ from fastapi.testclient import TestClient
 
 from app.assessment import _INTENSITY_MAP, _intensity_of
 from app.config import Config
-from app.db import DEFAULT_CHECKLIST, Database
+from app.db import Database, default_checklist
 from app import supplies
 
 
@@ -32,10 +32,39 @@ def test_checklist_seeded_on_init(tmp_path):
     async def run():
         await db.init()
         items = await db.list_checklist()
-        assert [i["label"] for i in items] == DEFAULT_CHECKLIST
+        assert [i["label"] for i in items] == default_checklist()
         # idempotent: init again does not duplicate
         await db.init()
-        assert len(await db.list_checklist()) == len(DEFAULT_CHECKLIST)
+        assert len(await db.list_checklist()) == len(default_checklist())
+
+    asyncio.run(run())
+
+
+def test_checklist_not_reseeded_after_user_empties_it(tmp_path):
+    """Issue #9: deleting every item, then restarting, brought the six
+    defaults back. Seeding is tied to creating the table, not to it being
+    empty."""
+    db = _db(tmp_path)
+
+    async def run():
+        await db.init()
+        for item in await db.list_checklist():
+            await db.delete_checklist(item["id"])
+        assert await db.list_checklist() == []
+        await db.init()   # a restart
+        assert await db.list_checklist() == []
+
+    asyncio.run(run())
+
+
+def test_checklist_seed_follows_language(tmp_path):
+    db = _db(tmp_path)
+
+    async def run():
+        await db.init(seed=default_checklist("nl"))
+        labels = [i["label"] for i in await db.list_checklist()]
+        assert labels[0] == "Wieg"
+        assert "Car seat installed" not in labels
 
     asyncio.run(run())
 
@@ -167,7 +196,7 @@ def test_supply_crud_and_refill_journals(client):
 
 def test_checklist_endpoints(client):
     items = client.get("/api/checklist").json()["items"]
-    assert len(items) == len(DEFAULT_CHECKLIST)
+    assert len(items) == len(default_checklist())
     cid = items[0]["id"]
     # check it done
     assert client.patch(f"/api/checklist/{cid}", json={"done": True}).json()["item"]["done"] == 1

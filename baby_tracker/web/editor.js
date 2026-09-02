@@ -285,8 +285,10 @@
     return api("PUT", "api/i18n/" + encodeURIComponent(lang), { overrides: payload })
       .then(function () {
         setMsg(t("editor.saved"));
-        // Drop the memoised catalog so the reload picks up the new overrides.
-        return I18N.load(I18N.locale === lang ? lang : I18N.locale);
+        // Drop the memoised catalog, or this reload is a no-op and the page
+        // keeps the strings it fetched at boot.
+        I18N.invalidate(lang);
+        return I18N.load(I18N.locale);
       })
       .then(function () {
         if (window.BTApplyLanguage) window.BTApplyLanguage();
@@ -306,6 +308,7 @@
     api("DELETE", "api/i18n/" + encodeURIComponent(lang))
       .then(function () {
         setMsg(t("editor.reverted"));
+        I18N.invalidate(lang);
         return I18N.load(I18N.locale);
       })
       .then(function () {
