@@ -241,9 +241,15 @@
       </div>
     </section>
 
+    <!-- Reminder series (pinned — armed from any journal row) -->
+    <section class="card reminders" id="reminders-card" hidden>
+      <h2 class="group-title"><span data-i18n="rem.title">Reminders</span> <span class="hint">— <span data-i18n="rem.hint">tap a journal row to repeat it on a schedule</span></span></h2>
+      <ul class="reminder-list" id="reminder-list"></ul>
+    </section>
+
     <!-- Journal (pinned below tabs — logs ALL event types) -->
     <section class="card journal">
-      <h2 class="group-title"><span data-i18n="journal.title">Journal</span> <span class="hint">— <span data-i18n="journal.hint">tap a row to fix its time or delete</span></span></h2>
+      <h2 class="group-title"><span data-i18n="journal.title">Journal</span> <span class="hint">— <span data-i18n="journal.hint">tap a row to fix its time, delete it, or repeat it</span></span></h2>
       <ul class="journal-list" id="journal"></ul>
     </section>
 

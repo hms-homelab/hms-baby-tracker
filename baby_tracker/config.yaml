@@ -87,7 +87,7 @@ schema:
   # still show in the journal, and the Baby Remote plus any automations keep
   # logging hidden types. The Baby tab cannot be hidden.
   hidden_modules:
-    - list(tab.get_ready|tab.contractions|tab.health|tab.growth|tab.supplies|group.feed|group.pump|group.diaper|group.other|feed.breast|feed.bottle|feed.solid|pump.left|pump.right|diaper.pee|diaper.poop|diaper.both|diaper.change|sleep|bath|medicine|tummy_time|card.summary|card.manual)?
+    - list(tab.get_ready|tab.contractions|tab.health|tab.growth|tab.supplies|group.feed|group.pump|group.diaper|group.other|feed.breast|feed.bottle|feed.solid|pump.left|pump.right|diaper.pee|diaper.poop|diaper.both|diaper.change|sleep|bath|medicine|tummy_time|card.summary|card.manual|card.reminders)?
   # AI daily summaries: a warm plain-language recap of the day, shown in the
   # summary card. Sends only an ANONYMIZED digest (counts/trends, never names or
   # notes). Provider: hosted proxy, your own Ollama, or a Claude/Gemini/OpenAI key.

@@ -49,6 +49,13 @@ SUPPLY_FIELDS = (
     "low_notified", "created_at", "updated_at",
 )
 
+# Editable columns of baby_reminders (recurring reminder series, SDD-007).
+REMINDER_FIELDS = (
+    "title", "event_type", "event_subtype", "mode", "interval_min", "at_time",
+    "start_at", "stop_at", "enabled", "last_fired_at", "fire_count",
+    "created_at", "updated_at",
+)
+
 # Backup/restore (issue #5): the per-table column set dumped and reloaded by
 # export_all / import_all. `id` is intentionally excluded so a restore reassigns
 # fresh primary keys (no sequence surgery, no clashes with existing rows).
@@ -57,6 +64,7 @@ EXPORT_TABLES = {
     "baby_supplies": SUPPLY_FIELDS,
     "baby_checklist": ("label", "position", "done", "done_at", "updated_at"),
     "baby_summaries": ("text", "provider", "source", "generated_at", "day"),
+    "baby_reminders": REMINDER_FIELDS,
 }
 
 # Timestamp columns that Postgres stores as timestamptz (need datetime on insert).
@@ -181,6 +189,23 @@ CREATE TABLE IF NOT EXISTS baby_summaries (
     day          TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_baby_summaries_day ON baby_summaries (day);
+
+CREATE TABLE IF NOT EXISTS baby_reminders (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    title         TEXT NOT NULL,
+    event_type    TEXT,
+    event_subtype TEXT,
+    mode          TEXT NOT NULL DEFAULT 'interval',
+    interval_min  INTEGER,
+    at_time       TEXT,
+    start_at      TEXT NOT NULL,
+    stop_at       TEXT,
+    enabled       INTEGER NOT NULL DEFAULT 1,
+    last_fired_at TEXT,
+    fire_count    INTEGER NOT NULL DEFAULT 0,
+    created_at    TEXT NOT NULL,
+    updated_at    TEXT NOT NULL
+);
 """
 
 
@@ -556,6 +581,63 @@ class SqliteDatabase:
             (n,) = await cur.fetchone()
         return int(n)
 
+    # --- reminder series (SDD-007) -----------------------------------------
+    async def list_reminders(self) -> list[dict]:
+        import aiosqlite
+
+        async with aiosqlite.connect(self.path) as db:
+            db.row_factory = aiosqlite.Row
+            cur = await db.execute(
+                "SELECT * FROM baby_reminders ORDER BY enabled DESC, created_at DESC"
+            )
+            rows = await cur.fetchall()
+        return [dict(r) for r in rows]
+
+    async def get_reminder(self, rid: int) -> dict | None:
+        import aiosqlite
+
+        async with aiosqlite.connect(self.path) as db:
+            db.row_factory = aiosqlite.Row
+            cur = await db.execute("SELECT * FROM baby_reminders WHERE id = ?", (rid,))
+            r = await cur.fetchone()
+        return dict(r) if r else None
+
+    async def insert_reminder(self, data: dict) -> dict:
+        import aiosqlite
+
+        vals = _reminder_values(data)
+        cols = ", ".join(vals.keys())
+        ph = ", ".join("?" for _ in vals)
+        async with aiosqlite.connect(self.path) as db:
+            cur = await db.execute(
+                f"INSERT INTO baby_reminders ({cols}) VALUES ({ph})", tuple(vals.values())
+            )
+            await db.commit()
+            rid = cur.lastrowid
+        return await self.get_reminder(rid)
+
+    async def update_reminder(self, rid: int, **fields) -> dict | None:
+        import aiosqlite
+
+        allowed = {k: v for k, v in fields.items() if k in REMINDER_FIELDS}
+        if not allowed:
+            return await self.get_reminder(rid)
+        allowed["updated_at"] = _now_iso()
+        sets = ", ".join(f"{k} = ?" for k in allowed)
+        vals = list(allowed.values()) + [rid]
+        async with aiosqlite.connect(self.path) as db:
+            await db.execute(f"UPDATE baby_reminders SET {sets} WHERE id = ?", vals)
+            await db.commit()
+        return await self.get_reminder(rid)
+
+    async def delete_reminder(self, rid: int) -> bool:
+        import aiosqlite
+
+        async with aiosqlite.connect(self.path) as db:
+            cur = await db.execute("DELETE FROM baby_reminders WHERE id = ?", (rid,))
+            await db.commit()
+            return cur.rowcount > 0
+
     # -- Backup / restore (issue #5) -----------------------------------------
     async def export_all(self) -> dict:
         import aiosqlite
@@ -590,6 +672,27 @@ class SqliteDatabase:
                 counts[table] = len(rows)
             await db.commit()
         return counts
+
+
+def _reminder_values(data: dict) -> dict:
+    """Column values for a new reminder series, shared by both backends."""
+    now = _now_iso()
+    mode = data.get("mode") or "interval"
+    return {
+        "title": (data.get("title") or "Reminder").strip()[:120],
+        "event_type": data.get("event_type") or None,
+        "event_subtype": data.get("event_subtype") or None,
+        "mode": mode if mode in ("interval", "daily") else "interval",
+        "interval_min": _int_or_none(data.get("interval_min")),
+        "at_time": data.get("at_time") or None,
+        "start_at": data.get("start_at") or now,
+        "stop_at": data.get("stop_at") or None,
+        "enabled": 1 if data.get("enabled", True) else 0,
+        "last_fired_at": None,
+        "fire_count": 0,
+        "created_at": now,
+        "updated_at": now,
+    }
 
 
 def _num_or_none(v):
@@ -669,6 +772,23 @@ CREATE TABLE IF NOT EXISTS baby_summaries (
     day          text NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_baby_summaries_day ON baby_summaries (day);
+
+CREATE TABLE IF NOT EXISTS baby_reminders (
+    id            bigserial PRIMARY KEY,
+    title         text NOT NULL,
+    event_type    text,
+    event_subtype text,
+    mode          text NOT NULL DEFAULT 'interval',
+    interval_min  integer,
+    at_time       text,
+    start_at      text NOT NULL,
+    stop_at       text,
+    enabled       integer NOT NULL DEFAULT 1,
+    last_fired_at text,
+    fire_count    integer NOT NULL DEFAULT 0,
+    created_at    text NOT NULL,
+    updated_at    text NOT NULL
+);
 """
 
 
@@ -1012,6 +1132,57 @@ class PostgresDatabase:
                 "SELECT COUNT(*) FROM baby_summaries WHERE day = $1", day
             )
         return int(n)
+
+    # --- reminder series (SDD-007) -----------------------------------------
+    async def list_reminders(self) -> list[dict]:
+        pool = await self._get_pool()
+        async with pool.acquire() as con:
+            rows = await con.fetch(
+                "SELECT * FROM baby_reminders ORDER BY enabled DESC, created_at DESC"
+            )
+        return [dict(r) for r in rows]
+
+    async def get_reminder(self, rid: int) -> dict | None:
+        pool = await self._get_pool()
+        async with pool.acquire() as con:
+            r = await con.fetchrow("SELECT * FROM baby_reminders WHERE id = $1", int(rid))
+        return dict(r) if r else None
+
+    async def insert_reminder(self, data: dict) -> dict:
+        vals = _reminder_values(data)
+        cols = ", ".join(vals.keys())
+        ph = ", ".join(f"${i}" for i in range(1, len(vals) + 1))
+        pool = await self._get_pool()
+        async with pool.acquire() as con:
+            row = await con.fetchrow(
+                f"INSERT INTO baby_reminders ({cols}) VALUES ({ph}) RETURNING *",
+                *vals.values(),
+            )
+        return dict(row)
+
+    async def update_reminder(self, rid: int, **fields) -> dict | None:
+        allowed = {k: v for k, v in fields.items() if k in REMINDER_FIELDS}
+        if not allowed:
+            return await self.get_reminder(rid)
+        allowed["updated_at"] = _now_iso()
+        keys = list(allowed.keys())
+        sets = ", ".join(f"{k} = ${i}" for i, k in enumerate(keys, start=1))
+        vals = list(allowed.values()) + [int(rid)]
+        pool = await self._get_pool()
+        async with pool.acquire() as con:
+            row = await con.fetchrow(
+                f"UPDATE baby_reminders SET {sets} WHERE id = ${len(vals)} RETURNING *", *vals
+            )
+        return dict(row) if row else None
+
+    async def delete_reminder(self, rid: int) -> bool:
+        pool = await self._get_pool()
+        async with pool.acquire() as con:
+            res = await con.execute("DELETE FROM baby_reminders WHERE id = $1", int(rid))
+        try:
+            return int(res.split()[-1]) > 0
+        except (ValueError, IndexError):
+            return False
 
     async def reset(self) -> None:
         pool = await self._get_pool()

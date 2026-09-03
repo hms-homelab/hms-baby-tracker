@@ -104,6 +104,7 @@ hidden_modules:
 | `sleep`, `bath`, `medicine`, `tummy_time` | One button in the Other group (`sleep` covers both Start and End) |
 | `card.summary` | The AI daily summary block |
 | `card.manual` | The "Add / backfill an event" card |
+| `card.reminders` | The Reminders card, and the **Remind me** button in the journal row editor |
 
 Notes:
 
@@ -235,7 +236,7 @@ mosquitto_pub -t baby/remote/event \
 | `baby/remote/reminder` | no       | `{"l1","l2","secs"}` transient OLED banner — pushed when a feed reminder fires. |
 | `baby/remote/history/replay` | no | `{"events":[…],"done":bool}` — chunked history backfill (see below).      |
 | `baby/assessment`      | yes      | `{"text","time"}` — the Contraction AI assessment (only when `ollama_enabled`). |
-| `baby/alert`           | no       | **Unified notifications bus** — `{"kind","title","message",…}` for every actionable alert. `kind` ∈ `fever`, `supply_low`, `supply_due`, `feed_reminder`, `pump_reminder`. Subscribe once and branch on `kind`. |
+| `baby/alert`           | no       | **Unified notifications bus** — `{"kind","title","message",…}` for every actionable alert. `kind` ∈ `fever`, `supply_low`, `supply_due`, `feed_reminder`, `pump_reminder`, `reminder`. Subscribe once and branch on `kind`. |
 | `baby/supply/reminder` | no       | `{"title","message","supply"}` — legacy alias of the supply alerts on `baby/alert` (kept for 2026.4.0 automations). |
 | `baby/summary`         | yes      | `{"text","time","source"}` — the latest AI daily summary (only when `summary_enabled`). |
 
@@ -369,6 +370,57 @@ ISO8601 timestamp), `PATCH api/event/{id}` (edit `logged_at` / `note` /
 `event_subtype`), and `DELETE api/event/{id}`. Edits and deletes immediately
 recompute the stats and refresh the device OLED, but — unlike a brand-new event
 — they don't re-fire `baby/event` or send a push notification.
+
+### Reminders (repeat a row on a schedule)
+
+Anything you have logged can become a repeating reminder: a dose every 6 hours
+through the night, a vitamin every morning, a bottle every 3 hours while a
+grandparent is on shift.
+
+1. **Tap the journal row** you want to repeat (the dose you just gave).
+2. Press **Remind me**.
+3. Give it a title (pre-filled from the row's note), choose **Every N
+   hours/minutes** or **Every day at HH:MM**, and optionally a **stop** date and
+   time.
+4. **Start reminder.** The schedule is armed immediately — no restart, nothing
+   to wait for.
+
+The first alert lands one full interval later (arm "every 6h" at 2pm and the
+first one is at 8pm), because the dose that prompted it was just given. Armed
+series appear in the **Reminders** card with their next fire, where you can
+**Pause** one for a while or **Stop** it for good. Series survive an add-on
+restart, and one that comes due while the add-on is restarting still fires as
+long as it is less than an hour late.
+
+Each fire publishes on the `baby/alert` bus, so the automation you already use
+for pump/feed/supply reminders delivers these too:
+
+```yaml
+automation:
+  - alias: Baby reminder notification
+    trigger:
+      - platform: mqtt
+        topic: baby/alert
+    condition:
+      - "{{ trigger.payload_json.kind == 'reminder' }}"
+    action:
+      - service: notify.mobile_app_pixel_8
+        data:
+          title: "{{ trigger.payload_json.title }}"
+          message: "{{ trigger.payload_json.message }}"
+```
+
+The payload also carries `reminder_id`, `reminder_title`, and the `event_type` /
+`event_subtype` of the row it was armed from, so you can branch further.
+
+REST: `GET`/`POST api/reminders`, `PATCH`/`DELETE api/reminders/{id}`. A `POST`
+takes `title`, `mode` (`interval`|`daily`), `interval_min` or `at_time`
+(`HH:MM`), and an optional `stop_at` (ISO8601).
+
+> **This is a timer, not a medical device.** The add-on repeats exactly what you
+> ask for. It does not know a safe dosing interval, does not cap doses per day,
+> and will not warn you about either. Dosing decisions stay with you and your
+> pediatrician.
 
 ## Data & persistence
 

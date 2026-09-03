@@ -147,6 +147,10 @@
     if (sleepRow) sleepRow.hidden = !visible("sleep");
     var manualCard = document.querySelector(".card.manual");
     if (manualCard) manualCard.hidden = !visible("card.manual");
+    // The Reminders card also stays hidden while no series exists (see
+    // renderReminders) — this is the explicit opt-out.
+    var remCard = document.getElementById("reminders-card");
+    if (remCard && !visible("card.reminders")) remCard.hidden = true;
   }
 
   // --- Networking ---------------------------------------------------------
@@ -561,6 +565,12 @@
         .catch(function (err) { setStatus(t("err.failed", { msg: err.message }), true); });
     });
 
+    // Turn this row into a repeating series ("give it again in 6h").
+    var remind = document.createElement("button");
+    remind.className = "j-remind-btn";
+    remind.textContent = t("rem.remindBtn");
+    remind.addEventListener("click", function () { openReminderForm(li, entry, box); });
+
     var cancel = document.createElement("button");
     cancel.className = "j-cancel";
     cancel.textContent = t("journal.cancel");
@@ -569,8 +579,258 @@
     });
 
     box.appendChild(time); box.appendChild(note);
-    box.appendChild(save); box.appendChild(del); box.appendChild(cancel);
+    box.appendChild(save); box.appendChild(del);
+    if (visible("card.reminders")) box.appendChild(remind);
+    box.appendChild(cancel);
     li.appendChild(box);
+  }
+
+  // --- Reminder series (SDD-007) ------------------------------------------
+  // Turn any journal row into a repeating alert ("Tylenol every 6h"). The form
+  // opens inside the row's inline editor; the series itself is listed in the
+  // pinned Reminders card, which is where you pause or stop it.
+
+  // The journal label minus its emoji, used to prefill the reminder title.
+  function labelText(e) {
+    return journalLabel(e)
+      .replace(/[←-⯿️‍]/g, "")  // arrows/symbols, VS16, ZWJ
+      .replace(/[\uD800-\uDFFF]/g, "")              // surrogate pairs (emoji)
+      .trim();
+  }
+
+  function openReminderForm(li, entry, editorBox) {
+    if (li.querySelector(".j-remind")) return;
+    var box = document.createElement("div");
+    box.className = "j-remind";
+    box.addEventListener("click", function (ev) { ev.stopPropagation(); });
+
+    var title = document.createElement("input");
+    title.type = "text";
+    title.className = "rem-title";
+    title.placeholder = t("rem.titlePlaceholder");
+    title.value = (entry.note || labelText(entry) || "").slice(0, 120);
+
+    // Mode 1: every N minutes/hours.
+    var rowEvery = document.createElement("label");
+    rowEvery.className = "rem-mode";
+    var radioEvery = document.createElement("input");
+    radioEvery.type = "radio";
+    radioEvery.name = "rem-mode-" + entry.id;
+    radioEvery.checked = true;
+    var every = document.createElement("input");
+    every.type = "number";
+    every.className = "rem-num";
+    every.min = "1";
+    every.step = "1";
+    every.value = "4";
+    var unit = document.createElement("select");
+    unit.className = "rem-unit";
+    [["rem.hours", 60], ["rem.minutes", 1]].forEach(function (u) {
+      var o = document.createElement("option");
+      o.textContent = t(u[0]);
+      o.value = String(u[1]);
+      unit.appendChild(o);
+    });
+    var everyLabel = document.createElement("span");
+    everyLabel.textContent = t("rem.every");
+    rowEvery.appendChild(radioEvery);
+    rowEvery.appendChild(everyLabel);
+    rowEvery.appendChild(every);
+    rowEvery.appendChild(unit);
+
+    // Mode 2: every day at HH:MM.
+    var rowDaily = document.createElement("label");
+    rowDaily.className = "rem-mode";
+    var radioDaily = document.createElement("input");
+    radioDaily.type = "radio";
+    radioDaily.name = "rem-mode-" + entry.id;
+    var dailyLabel = document.createElement("span");
+    dailyLabel.textContent = t("rem.dailyAt");
+    var atTime = document.createElement("input");
+    atTime.type = "time";
+    atTime.className = "rem-time";
+    atTime.value = "08:00";
+    rowDaily.appendChild(radioDaily);
+    rowDaily.appendChild(dailyLabel);
+    rowDaily.appendChild(atTime);
+
+    var rowStop = document.createElement("label");
+    rowStop.className = "rem-stop";
+    var stopLabel = document.createElement("span");
+    stopLabel.textContent = t("rem.stopAfter");
+    var stop = document.createElement("input");
+    stop.type = "datetime-local";
+    rowStop.appendChild(stopLabel);
+    rowStop.appendChild(stop);
+
+    var actions = document.createElement("div");
+    actions.className = "rem-actions";
+    var start = document.createElement("button");
+    start.className = "btn-save";
+    start.textContent = t("rem.start");
+    var cancel = document.createElement("button");
+    cancel.className = "j-cancel";
+    cancel.textContent = t("journal.cancel");
+    cancel.addEventListener("click", function () { box.remove(); });
+    actions.appendChild(start);
+    actions.appendChild(cancel);
+
+    start.addEventListener("click", function () {
+      var name = (title.value || "").trim();
+      if (!name) { setStatus(t("err.reminderTitle"), true); return; }
+      var payload = {
+        title: name,
+        event_type: entry.event_type || null,
+        event_subtype: entry.event_subtype || null,
+      };
+      if (radioDaily.checked) {
+        if (!atTime.value) { setStatus(t("err.reminderTime"), true); return; }
+        payload.mode = "daily";
+        payload.at_time = atTime.value.slice(0, 5);
+      } else {
+        var n = parseInt(every.value, 10);
+        if (isNaN(n) || n < 1) { setStatus(t("err.reminderEvery"), true); return; }
+        payload.mode = "interval";
+        payload.interval_min = n * parseInt(unit.value, 10);
+      }
+      if (stop.value) {
+        var iso = localInputToIso(stop.value);
+        if (!iso) { setStatus(t("err.invalidDateTime"), true); return; }
+        payload.stop_at = iso;
+      }
+      apiPost("api/reminders", payload)
+        .then(function () {
+          editingId = null;
+          setStatus(t("status.reminderArmed"));
+          return refresh().then(loadReminders);
+        })
+        .catch(function (err) { setStatus(t("err.failed", { msg: err.message }), true); });
+    });
+
+    // Keep the two modes mutually legible: typing in one selects it.
+    [every, unit].forEach(function (el) {
+      el.addEventListener("focus", function () { radioEvery.checked = true; });
+    });
+    atTime.addEventListener("focus", function () { radioDaily.checked = true; });
+
+    box.appendChild(title);
+    box.appendChild(rowEvery);
+    box.appendChild(rowDaily);
+    box.appendChild(rowStop);
+    box.appendChild(actions);
+    (editorBox || li).appendChild(box);
+    title.focus();
+  }
+
+  function loadReminders() {
+    var card = document.getElementById("reminders-card");
+    if (!card || !visible("card.reminders")) return Promise.resolve();
+    return apiGet("api/reminders")
+      .then(function (d) { renderReminders(d.reminders || []); })
+      .catch(function () {});
+  }
+
+  // "every 6h" / "1h 30m" — mirrors every_text() in app/scheduler.py.
+  function fmtEvery(min) {
+    min = Math.max(1, parseInt(min, 10) || 0);
+    var h = Math.floor(min / 60), m = min % 60;
+    if (h && m) return h + t("unit.h") + " " + m + t("unit.m");
+    return h ? h + t("unit.h") : m + t("unit.m");
+  }
+  function fmtWhen(iso) {
+    if (!iso) return "";
+    var d = new Date(iso);
+    if (isNaN(d.getTime())) return "";
+    var mins = Math.round((d.getTime() - Date.now()) / 60000);
+    return mins <= 0 ? t("rem.due") : t("rem.inTime", { t: fmtAgo(mins) });
+  }
+
+  function renderReminders(list) {
+    var card = document.getElementById("reminders-card");
+    var ul = document.getElementById("reminder-list");
+    if (!ul || !card) return;
+    // An empty card is noise on a phone: it only appears once a series exists.
+    card.hidden = !list.length;
+    ul.textContent = "";
+    list.forEach(function (r) {
+      var li = document.createElement("li");
+      li.className = "reminder-row" + (r.enabled ? "" : " off");
+
+      var head = document.createElement("div");
+      head.className = "reminder-head";
+      var name = document.createElement("span");
+      name.className = "reminder-name";
+      name.textContent = "⏰ " + r.title;
+      head.appendChild(name);
+      var next = document.createElement("span");
+      next.className = "reminder-next";
+      next.textContent = r.enabled ? fmtWhen(r.next_run) : t("rem.paused");
+      head.appendChild(next);
+      li.appendChild(head);
+
+      var badges = document.createElement("div");
+      badges.className = "reminder-badges";
+      var sched = document.createElement("span");
+      sched.className = "badge muted";
+      sched.textContent = r.mode === "daily"
+        ? t("rem.dailyBadge", { time: fmtAtTime(r.at_time) })
+        : t("rem.everyBadge", { every: fmtEvery(r.interval_min) });
+      badges.appendChild(sched);
+      if (r.stop_at) {
+        var untilB = document.createElement("span");
+        untilB.className = "badge muted";
+        untilB.textContent = t("rem.until", { when: fmtDateTime(r.stop_at) });
+        badges.appendChild(untilB);
+      }
+      if (r.fire_count) {
+        var fired = document.createElement("span");
+        fired.className = "badge muted";
+        fired.textContent = t("rem.fired", { n: r.fire_count }, r.fire_count);
+        badges.appendChild(fired);
+      }
+      li.appendChild(badges);
+
+      var actions = document.createElement("div");
+      actions.className = "reminder-actions";
+      actions.appendChild(supplyBtn(r.enabled ? t("rem.pause") : t("rem.resume"),
+        "s-refill", function () {
+          apiPatch("api/reminders/" + r.id, { enabled: !r.enabled })
+            .then(loadReminders)
+            .catch(function (err) { setStatus(t("err.failed", { msg: err.message }), true); });
+        }));
+      actions.appendChild(supplyBtn(t("rem.stop"), "s-del", function () {
+        if (!window.confirm(t("confirm.deleteReminder", { name: r.title }))) return;
+        apiDelete("api/reminders/" + r.id)
+          .then(function () { setStatus(t("status.reminderStopped")); return loadReminders(); })
+          .catch(function (err) { setStatus(t("err.failed", { msg: err.message }), true); });
+      }));
+      li.appendChild(actions);
+      ul.appendChild(li);
+    });
+  }
+
+  // Date + clock for a stop date. The date half is localized by Intl; the clock
+  // half goes through fmtClock so it follows `time_format` like every other time
+  // the app prints (SDD-006).
+  function fmtDateTime(iso) {
+    var d = new Date(iso);
+    if (isNaN(d.getTime())) return "";
+    try {
+      return new Intl.DateTimeFormat(I18N.locale || "en", {
+        timeZone: appTz || undefined, month: "short", day: "numeric",
+        hour: timeFmt === "24h" ? "2-digit" : "numeric", minute: "2-digit",
+        hour12: timeFmt !== "24h",
+      }).format(d);
+    } catch (e) { return d.toDateString() + " " + fmtClock(iso); }
+  }
+
+  // A stored "HH:MM" rendered through the same clock (mirrors at_time_text()).
+  function fmtAtTime(at) {
+    var m = String(at || "").match(/^(\d{1,2}):(\d{2})/);
+    if (!m) return String(at || "");
+    var h = +m[1];
+    if (timeFmt === "24h") return pad(h) + ":" + m[2];
+    return (h % 12 || 12) + ":" + m[2] + (h >= 12 ? " PM" : " AM");
   }
 
   // --- Contraction readout (computed from journal entries) ----------------
@@ -684,6 +944,7 @@
         renderContractionReadout();
         renderHealthReadout();
         loadSummary();
+        loadReminders();
         if (currentTab === "supplies") loadSupplies();
         if (currentTab === "growth") loadGrowth();
         setStatus("");

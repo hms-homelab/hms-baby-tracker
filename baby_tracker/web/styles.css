@@ -356,7 +356,72 @@ html, body {
 .j-edit .j-save { background: color-mix(in srgb, var(--glow) 14%, transparent); color: var(--glow); border: 1px solid color-mix(in srgb, var(--glow) 30%, transparent); }
 .j-edit .j-del { background: rgba(232, 155, 139, 0.12); color: #E89B8B; border: 1px solid rgba(232, 155, 139, 0.3); }
 .j-edit .j-cancel { background: transparent; color: var(--muted); border: 1px solid var(--line); }
+.j-edit .j-remind-btn { background: rgba(142, 140, 240, 0.12); color: #A9A7F5; border: 1px solid rgba(142, 140, 240, 0.32); }
 .j-edit button:active { transform: translateY(1px); opacity: 0.9; }
+
+/* "Remind me" form, opened inside the row editor */
+.j-remind {
+  flex-basis: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  margin-top: 4px;
+  padding-top: 11px;
+  border-top: 1px dashed var(--line-2);
+}
+.j-remind .rem-title {
+  border: 1px solid var(--line-2);
+  border-radius: 11px;
+  padding: 10px 11px;
+  font-size: 14px;
+  font-family: inherit;
+  background: var(--surface);
+  color: var(--ink);
+}
+.rem-mode, .rem-stop {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--muted);
+  flex-wrap: wrap;
+}
+.rem-mode input[type="radio"] { width: 18px; height: 18px; accent-color: var(--glow); flex: 0 0 auto; }
+.j-remind input[type="number"],
+.j-remind input[type="time"],
+.j-remind input[type="datetime-local"],
+.j-remind select {
+  border: 1px solid var(--line-2);
+  border-radius: 10px;
+  padding: 8px 10px;
+  font-size: 14px;
+  font-family: var(--mono);
+  background: var(--surface);
+  color: var(--ink);
+  color-scheme: dark;
+}
+.j-remind .rem-num { width: 72px; }
+.j-remind .rem-unit { font-family: inherit; }
+.rem-stop input { flex: 1 1 auto; min-width: 0; }
+.rem-actions { display: flex; gap: 8px; }
+.rem-actions button { flex: 1; }
+
+/* ============ Reminder series card ============ */
+.reminder-list { list-style: none; margin: 0; padding: 0; }
+.reminder-row {
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 12px;
+  margin-bottom: 10px;
+  background: var(--surface-2);
+}
+.reminder-row:last-child { margin-bottom: 0; }
+.reminder-row.off { opacity: 0.55; }
+.reminder-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.reminder-name { font-size: 14px; font-weight: 700; color: var(--ink); }
+.reminder-next { font-family: var(--mono); font-size: 13px; color: var(--glow); white-space: nowrap; }
+.reminder-badges { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.reminder-actions { display: flex; gap: 7px; margin-top: 11px; }
 
 /* Footer */
 .foot { text-align: center; margin-top: 6px; }

@@ -117,6 +117,32 @@ class RefillIn(BaseModel):
     quantity: float | None = None  # new stock level; omit to keep current
 
 
+class ReminderIn(BaseModel):
+    """A repeating reminder series ("Tylenol every 6h").
+
+    `mode="interval"` uses `interval_min`; `mode="daily"` uses `at_time`
+    ("HH:MM", in the add-on's timezone). `stop_at` (ISO8601) ends the series;
+    omit it to keep going until it is stopped by hand. `event_type` /
+    `event_subtype` record the journal row it was armed from (informational).
+    """
+    title: str
+    mode: str = "interval"
+    interval_min: int | None = None
+    at_time: str | None = None
+    stop_at: str | None = None
+    event_type: str | None = None
+    event_subtype: str | None = None
+
+
+class ReminderPatch(BaseModel):
+    title: str | None = None
+    mode: str | None = None
+    interval_min: int | None = None
+    at_time: str | None = None
+    stop_at: str | None = None
+    enabled: bool | None = None
+
+
 class ChecklistIn(BaseModel):
     label: str
 
@@ -250,6 +276,9 @@ def create_app(cfg: Config | None = None) -> FastAPI:
         # "auto"): a Dutch household should not start with "Car seat installed".
         await db.init(seed=default_checklist(display.device_lang(cfg), cfg.data_dir))
         reminders.start()
+        # Re-arm the stored reminder series (the jobs live in memory only, so an
+        # add-on restart would otherwise silently drop every armed series).
+        await reminders.load_series()
         # Daily AI summary cron (SDD-003) — only when enabled and scheduled.
         if cfg.summary_enabled and int(cfg.summary_hour) > 0:
             reminders.sched.add_job(
@@ -363,6 +392,10 @@ def create_app(cfg: Config | None = None) -> FastAPI:
             return JSONResponse({"ok": False, "error": "not a Baby Tracker backup file"},
                                 status_code=400)
         counts = await db.import_all(tables, replace=True)
+        # A restore replaces the reminder rows, so the armed jobs (which mirror
+        # them) have to be rebuilt from the new set.
+        reminders.clear_series()
+        await reminders.load_series()
         await publish_state_now()
         return {"ok": True, "restored": counts}
 
@@ -468,6 +501,80 @@ def create_app(cfg: Config | None = None) -> FastAPI:
     async def remove_supply(sid: int):
         if not await db.delete_supply(sid):
             return JSONResponse({"ok": False, "error": "not found"}, status_code=404)
+        return {"ok": True}
+
+    # --- reminder series (SDD-007) ----------------------------------------
+    # "Remind me every 6h" armed from a journal row. The DB row is the source of
+    # truth and the APScheduler job mirrors it, so every write re-arms the job.
+    def _decorate(row: dict) -> dict:
+        out = dict(row)
+        out["enabled"] = bool(row.get("enabled"))
+        out["next_run"] = reminders.series_next_run(row["id"]) if out["enabled"] else None
+        return out
+
+    def _validate_series(mode: str, interval_min, at_time) -> str | None:
+        if mode not in ("interval", "daily"):
+            return "mode must be interval or daily"
+        if mode == "interval":
+            if not interval_min or int(interval_min) < 1:
+                return "interval_min must be at least 1 minute"
+        else:
+            try:
+                h, m = (int(x) for x in str(at_time or "").split(":")[:2])
+            except (ValueError, TypeError):
+                return "at_time must be HH:MM"
+            if not (0 <= h <= 23 and 0 <= m <= 59):
+                return "at_time must be HH:MM"
+        return None
+
+    @app.get("/api/reminders")
+    async def list_reminders():
+        return {"reminders": [_decorate(r) for r in await db.list_reminders()]}
+
+    @app.post("/api/reminders")
+    async def create_reminder(r: ReminderIn):
+        if not (r.title or "").strip():
+            return JSONResponse({"ok": False, "error": "title required"}, status_code=400)
+        err = _validate_series(r.mode, r.interval_min, r.at_time)
+        if err:
+            return JSONResponse({"ok": False, "error": err}, status_code=400)
+        row = await db.insert_reminder(r.model_dump())
+        # Start the worker immediately — no restart, no waiting for a poll.
+        reminders.schedule_series(row)
+        log.info("reminder series #%s armed: %s", row["id"], row.get("title"))
+        return {"ok": True, "reminder": _decorate(row)}
+
+    @app.patch("/api/reminders/{rid}")
+    async def patch_reminder(rid: int, r: ReminderPatch):
+        cur = await db.get_reminder(rid)
+        if not cur:
+            return JSONResponse({"ok": False, "error": "not found"}, status_code=404)
+        fields = r.model_fields_set
+        kwargs = {}
+        for name in ("title", "mode", "interval_min", "at_time", "stop_at"):
+            if name in fields:
+                kwargs[name] = getattr(r, name)
+        if "enabled" in fields and r.enabled is not None:
+            kwargs["enabled"] = 1 if r.enabled else 0
+        merged = {**cur, **kwargs}
+        err = _validate_series(merged.get("mode") or "interval",
+                               merged.get("interval_min"), merged.get("at_time"))
+        if err:
+            return JSONResponse({"ok": False, "error": err}, status_code=400)
+        # Restarting the clock on a schedule change is deliberate: switching
+        # "every 6h" to "every 4h" means 4h from this moment, not from the dose
+        # that started the series. Same for switching a paused series back on.
+        if ({"mode", "interval_min", "at_time"} & set(kwargs)) or kwargs.get("enabled"):
+            kwargs["start_at"] = dt.datetime.now(dt.timezone.utc).isoformat()
+        row = await db.update_reminder(rid, **kwargs)
+        reminders.schedule_series(row)
+        return {"ok": True, "reminder": _decorate(row)}
+
+    @app.delete("/api/reminders/{rid}")
+    async def remove_reminder(rid: int):
+        if not await db.delete_reminder(rid):
+            return JSONResponse({"ok": False, "error": "not found"}, status_code=404)
+        reminders.unschedule_series(rid)
         return {"ok": True}
 
     # --- Get Ready checklist ----------------------------------------------

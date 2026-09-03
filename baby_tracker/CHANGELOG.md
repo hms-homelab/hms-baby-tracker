@@ -1,5 +1,34 @@
 # Changelog
 
+## 2026.5.0 - 2026-09-03
+
+- **added: turn any logged row into a repeating reminder (SDD-007).** Tap a
+  journal row, press **Remind me**, and give it a title, a schedule (**every N
+  hours/minutes** or **every day at HH:MM**) and, if you want, a stop date. The
+  series is armed the moment you save, with no restart and nothing to wait for.
+  Built for the 3am case it came from: a dose of infant Tylenol every 6 hours,
+  then an antibiotic twice a day for ten days, tracked next to the doses
+  themselves instead of in a timer app on one parent's phone.
+  - The first alert lands one full interval later, never on save, because the
+    dose that prompted the series was just given.
+  - A new **Reminders** card lists the armed series with their next fire, the
+    schedule, and how many have been sent, with **Pause** and **Stop**. It stays
+    out of the way until a series exists, and `hidden_modules: [card.reminders]`
+    removes it (and the **Remind me** button) entirely.
+  - Series live in the database, are included in backup and restore, and are
+    re-armed on startup. One that comes due while the add-on is restarting still
+    fires if it is less than an hour late, and a series that slept through a long
+    outage rolls forward to its next slot instead of firing a burst of missed
+    ones.
+  - Each fire publishes `{"kind": "reminder", …}` on the existing `baby/alert`
+    bus, carrying `reminder_id`, `reminder_title` and the source row's
+    `event_type`, so the automation already notifying you about pump, feed and
+    supply reminders delivers these with no changes.
+  - REST: `GET`/`POST /api/reminders`, `PATCH`/`DELETE /api/reminders/{id}`.
+  - **This is a timer, not a medical device.** It repeats exactly what you ask
+    for: it does not know a safe dosing interval, does not cap doses per day, and
+    will not warn you about either.
+
 ## 2026.4.16 - 2026-09-02
 
 Five fixes from the Dutch testing on issue #9 (thanks @mkampstra).

@@ -289,7 +289,9 @@ class MqttBridge:
                             extra: dict | None = None) -> None:
         """Fire an actionable alert on the unified `baby/alert` bus.
 
-        `kind` ∈ fever / supply_low / supply_due / feed_reminder / pump_reminder.
+        `kind` ∈ fever / supply_low / supply_due / feed_reminder / pump_reminder
+        / reminder (a user-created repeating series, e.g. "Tylenol every 6h" —
+        carries `reminder_id` and `reminder_title`).
         One topic for HA automations to trigger on and branch by `kind`.
         Non-retained; best effort; no-op until the broker is connected.
         """

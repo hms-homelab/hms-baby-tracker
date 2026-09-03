@@ -19,11 +19,48 @@ import logging
 from zoneinfo import ZoneInfo
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
+from apscheduler.triggers.cron import CronTrigger
+from apscheduler.triggers.interval import IntervalTrigger
 
-from . import display, i18n, supplies
+from . import display, i18n, supplies, timefmt
 from .timefmt import clock
 
 log = logging.getLogger("baby.scheduler")
+
+# A reminder series that came due while the add-on was restarting still fires,
+# as long as it is less than an hour late (coalesced into a single run). The
+# APScheduler default would silently drop it.
+SERIES_GRACE = 3600
+
+
+def parse_iso(value: str | None) -> dt.datetime | None:
+    """Parse an ISO8601 string to an aware UTC-anchored datetime (None-safe)."""
+    if not value:
+        return None
+    try:
+        d = dt.datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    return d.replace(tzinfo=dt.timezone.utc) if d.tzinfo is None else d
+
+
+def at_time_text(at_time: str | None, fmt: str = timefmt.TWELVE) -> str:
+    """Render a stored `HH:MM` through the app's one clock (SDD-006), so a daily
+    series reads "8:00 AM" or "08:00" like every other time the app prints."""
+    try:
+        hour, minute = (int(x) for x in str(at_time or "").split(":")[:2])
+        return timefmt.clock(dt.time(hour=hour, minute=minute), fmt)
+    except (ValueError, TypeError):
+        return str(at_time or "")
+
+
+def every_text(minutes: int) -> str:
+    """Humanize an interval: 90 -> '1h 30m', 360 -> '6h', 45 -> '45m'."""
+    minutes = max(1, int(minutes))
+    h, m = divmod(minutes, 60)
+    if h and m:
+        return f"{h}h {m}m"
+    return f"{h}h" if h else f"{m}m"
 
 
 class Reminders:
@@ -93,6 +130,149 @@ class Reminders:
             # Legacy alias (baby/supply/reminder) kept for 2026.4.0 automations.
             with contextlib.suppress(Exception):
                 await self.mqtt.publish_supply_reminder(title, message, supply)
+
+    # --- custom reminder series (SDD-007) ----------------------------------
+    # A series is a user-created repeating alert ("Tylenol every 6h"), armed
+    # from a journal row or the Reminders card. The DB row is the source of
+    # truth; the APScheduler job is a rebuildable mirror of it, re-armed on
+    # every start by load_series().
+    @staticmethod
+    def series_job_id(rid) -> str:
+        return f"series_{int(rid)}"
+
+    def _series_trigger(self, row: dict):
+        """Build the trigger for one series, or None if it can't/shouldn't run.
+
+        Interval series start one full interval from now (or from the row's
+        `start_at` when it is still in the future), so arming "every 6h" at 2pm
+        first fires at 8pm — never instantly.
+        """
+        stop = parse_iso(row.get("stop_at"))
+        now = dt.datetime.now(dt.timezone.utc)
+        if stop and stop <= now:
+            return None
+        if (row.get("mode") or "interval") == "daily":
+            at = str(row.get("at_time") or "")
+            try:
+                hour, minute = (int(x) for x in at.split(":")[:2])
+            except (ValueError, TypeError):
+                return None
+            return CronTrigger(hour=hour, minute=minute, timezone=self.cfg.timezone,
+                               end_date=stop)
+        minutes = int(row.get("interval_min") or 0)
+        if minutes < 1:
+            return None
+        start = parse_iso(row.get("start_at")) or now
+        first = start + dt.timedelta(minutes=minutes)
+        # Catch up a series armed before a long outage: roll forward to the next
+        # slot in the future instead of firing a burst of missed ones.
+        if first <= now:
+            missed = int((now - first).total_seconds() // (minutes * 60)) + 1
+            first += dt.timedelta(minutes=minutes * missed)
+        if stop and first >= stop:
+            return None
+        return IntervalTrigger(minutes=minutes, start_date=first, end_date=stop)
+
+    def schedule_series(self, row: dict) -> dt.datetime | None:
+        """(Re)arm one series. Returns its next run, or None when not armed."""
+        rid = row.get("id")
+        if rid is None:
+            return None
+        self.unschedule_series(rid)
+        if not row.get("enabled"):
+            return None
+        trigger = self._series_trigger(row)
+        if trigger is None:
+            return None
+        job = self.sched.add_job(
+            self._fire_series, trigger, args=[int(rid)],
+            id=self.series_job_id(rid), replace_existing=True,
+            coalesce=True, misfire_grace_time=SERIES_GRACE,
+        )
+        log.info("armed reminder series #%s (%s) next=%s", rid, row.get("title"),
+                 getattr(job, "next_run_time", None))
+        return getattr(job, "next_run_time", None)
+
+    def unschedule_series(self, rid) -> None:
+        with contextlib.suppress(Exception):
+            self.sched.remove_job(self.series_job_id(rid))
+
+    def clear_series(self) -> None:
+        """Drop every armed series job (used before a restore rebuilds them)."""
+        for job in list(self.sched.get_jobs()):
+            if str(job.id).startswith("series_"):
+                with contextlib.suppress(Exception):
+                    job.remove()
+
+    def series_next_run(self, rid) -> str | None:
+        job = self.sched.get_job(self.series_job_id(rid))
+        run_at = getattr(job, "next_run_time", None) if job else None
+        return run_at.isoformat() if run_at else None
+
+    async def load_series(self) -> None:
+        """Re-arm every stored series on startup (jobs live in memory only)."""
+        if self.db is None:
+            return
+        try:
+            rows = await self.db.list_reminders()
+        except Exception as e:
+            log.warning("could not load reminder series: %s", e)
+            return
+        for row in rows:
+            with contextlib.suppress(Exception):
+                self.schedule_series(row)
+
+    async def _fire_series(self, rid: int) -> None:
+        """Deliver one series alert and record the run.
+
+        The row is re-read at fire time so an edited title or a series stopped
+        from another device takes effect without a restart.
+        """
+        if self.db is None:
+            return
+        try:
+            row = await self.db.get_reminder(rid)
+        except Exception as e:
+            log.warning("reminder #%s lookup failed: %s", rid, e)
+            return
+        if not row or not row.get("enabled"):
+            self.unschedule_series(rid)
+            return
+        stop = parse_iso(row.get("stop_at"))
+        now = dt.datetime.now(dt.timezone.utc)
+        if stop and stop <= now:
+            self.unschedule_series(rid)
+            with contextlib.suppress(Exception):
+                await self.db.update_reminder(rid, enabled=0)
+            return
+
+        name = row.get("title") or self._t("alert.reminderTitle")
+        title = "⏰ " + name
+        if (row.get("mode") or "interval") == "daily":
+            message = self._t("alert.reminderDaily", title=name,
+                              time=at_time_text(row.get("at_time"),
+                                                getattr(self.cfg, "time_format", "12h")))
+        else:
+            message = self._t("alert.reminderMsg", title=name,
+                              every=every_text(row.get("interval_min") or 0))
+        if self.mqtt is not None:
+            with contextlib.suppress(Exception):
+                await self.mqtt.publish_alert(
+                    "reminder", title, message,
+                    {"reminder_id": int(rid), "reminder_title": name,
+                     "event_type": row.get("event_type"),
+                     "event_subtype": row.get("event_subtype")},
+                )
+        with contextlib.suppress(Exception):
+            await self.db.update_reminder(
+                rid, last_fired_at=now.isoformat(),
+                fire_count=int(row.get("fire_count") or 0) + 1,
+            )
+        # The last run of a series with a stop date: retire the row so the card
+        # shows it as finished instead of pretending it is still armed.
+        if stop and self.series_next_run(rid) is None:
+            with contextlib.suppress(Exception):
+                await self.db.update_reminder(rid, enabled=0)
 
     async def reset_checklist(self) -> None:
         if self.db is None:

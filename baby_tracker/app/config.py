@@ -21,7 +21,7 @@ HIDEABLE_MODULES = (
     "pump.left", "pump.right",
     "diaper.pee", "diaper.poop", "diaper.both", "diaper.change",
     "sleep", "bath", "medicine", "tummy_time",
-    "card.summary", "card.manual",
+    "card.summary", "card.manual", "card.reminders",
 )
 
 OPTIONS_PATH = Path(os.environ.get("OPTIONS_PATH", "/data/options.json"))
