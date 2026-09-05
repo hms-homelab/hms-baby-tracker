@@ -237,7 +237,7 @@ mosquitto_pub -t baby/remote/event \
 | `baby/remote/reminder` | no       | `{"l1","l2","secs"}` transient OLED banner — pushed when a feed reminder fires. |
 | `baby/remote/history/replay` | no | `{"events":[…],"done":bool}` — chunked history backfill (see below).      |
 | `baby/assessment`      | yes      | `{"text","time"}` — the Contraction AI assessment (only when `ollama_enabled`). |
-| `baby/alert`           | no       | **Unified notifications bus** — `{"kind","title","message",…}` for every actionable alert. `kind` ∈ `fever`, `supply_low`, `supply_due`, `feed_reminder`, `pump_reminder`, `reminder`. Subscribe once and branch on `kind`. A `reminder` also carries `reminder_id`, `reminder_title` and a `url` deep link to the series. |
+| `baby/alert`           | no       | **Unified notifications bus** — `{"kind","title","message",…}` for every actionable alert. `kind` ∈ `fever`, `supply_low`, `supply_due`, `feed_reminder`, `pump_reminder`, `reminder`. Subscribe once and branch on `kind`. A `reminder` also carries `reminder_id`, `reminder_title` and a `url` deep link to the series (`/<slug>#reminder=<id>`). |
 | `baby/supply/reminder` | no       | `{"title","message","supply"}` — legacy alias of the supply alerts on `baby/alert` (kept for 2026.4.0 automations). |
 | `baby/summary`         | yes      | `{"text","time","source"}` — the latest AI daily summary (only when `summary_enabled`). |
 
@@ -395,7 +395,7 @@ long as it is less than an hour late.
 
 ### Acting on a reminder from the notification (SDD-008)
 
-Every fire carries a `url` deep link to the series in the web UI, plus its
+Every fire carries a `url` deep link to the series (`/<slug>#reminder=<id>`).in the web UI, plus its
 `reminder_id`, so the notification can do more than tell you something is due:
 
 ```yaml

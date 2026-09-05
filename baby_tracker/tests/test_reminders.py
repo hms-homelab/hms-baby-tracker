@@ -423,7 +423,7 @@ def test_alert_carries_a_deep_link_when_one_is_available(tmp_path):
     rem = Reminders(_cfg(tmp_path), mqtt=mqtt, db=db)
 
     async def link(rid):
-        return f"/hassio/ingress/abc_baby_tracker#reminder={rid}"
+        return f"/abc_baby_tracker#reminder={rid}"
 
     rem.deep_link = link
     row = asyncio.run(db.insert_reminder({"title": "Tylenol", "mode": "interval",
@@ -431,7 +431,7 @@ def test_alert_carries_a_deep_link_when_one_is_available(tmp_path):
                                           "event_type": "medicine"}))
     asyncio.run(rem._fire_series(row["id"]))
     extra = mqtt.alerts[0]["extra"]
-    assert extra["url"] == f"/hassio/ingress/abc_baby_tracker#reminder={row['id']}"
+    assert extra["url"] == f"/abc_baby_tracker#reminder={row['id']}"
     assert extra["reminder_id"] == row["id"]
 
 
@@ -516,3 +516,13 @@ def test_journal_entry_reports_the_series_it_came_from(client):
     tagged = {e["note"]: e["reminder_id"] for e in entries if e["event_type"] == "medicine"}
     assert tagged["Tylenol"] == rid
     assert tagged["by hand"] is None
+
+
+def test_deep_link_uses_the_ingress_panel_path(client):
+    """`/hassio/ingress/<slug>` 404s in Home Assistant; the add-on panel lives at
+    `/<slug>`. Verified against a live HA 2026.x instance."""
+    from app import main
+    import inspect
+    src = inspect.getsource(main.create_app)
+    assert '"/hassio/ingress/' not in src and "'/hassio/ingress/" not in src
+    assert 'f"/{slug}#reminder=' in src

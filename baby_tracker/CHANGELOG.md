@@ -1,5 +1,18 @@
 # Changelog
 
+## 2026.5.3 - 2026-09-05
+
+- **fixed: the reminder link now actually opens the app.** 2026.5.2 pointed it at
+  `/hassio/ingress/<slug>`, which returns 404 — the add-on's panel is at
+  `/<slug>`.
+- **fixed: landing on the right series no longer depends on the link.** Home
+  Assistant renders an add-on panel as an iframe of
+  `/api/hassio_ingress/<session>/` and does not pass a fragment through, so
+  `#reminder=<id>` reached the panel and never the app inside it. The app now
+  falls back to marking the series that fired most recently (within the last
+  hour) — which is the one whose notification you just tapped — and still honours
+  the fragment when it does survive, opening the app directly or standalone.
+
 ## 2026.5.2 - 2026-09-05
 
 Two defects in the reminder series shipped in 2026.5.0, both found the first

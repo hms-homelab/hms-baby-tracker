@@ -722,30 +722,65 @@
     title.focus();
   }
 
-  // A phone alert links here as #reminder=<id> (SDD-008). Scroll that series
-  // into view and mark it, so the tap lands on the record that called you
-  // instead of the top of the app. Consumed once: the hash is cleared so a
-  // later refresh doesn't keep re-highlighting a series you already dealt with.
-  function focusLinkedReminder() {
+  // Land on the series that called you, not the top of the app (SDD-008).
+  //
+  // Two ways in, because the obvious one does not survive Ingress. A phone alert
+  // links to `/<slug>#reminder=<id>`, but Home Assistant renders an add-on panel
+  // as an iframe of `/api/hassio_ingress/<session>/` and does NOT pass the
+  // fragment through — the parent page keeps the hash and this app never sees
+  // it. So the hash is honoured when it is there (opening the app directly, or
+  // standalone), and otherwise we fall back to the series that fired most
+  // recently, which is the one whose notification you just tapped.
+  var focusedReminder = null;   // only mark a given series once per page load
+
+  function focusLinkedReminder(list) {
+    var id = null;
     var m = /(?:^|[#&])reminder=(\d+)/.exec(window.location.hash || "");
-    if (!m) return;
-    var row = document.getElementById("reminder-" + m[1]);
-    if (!row) return;
-    if (window.history && window.history.replaceState) {
-      window.history.replaceState(null, "", window.location.pathname + window.location.search);
+    if (m) {
+      id = m[1];
+      // Consume it, so a later poll doesn't keep re-marking a series you have
+      // already dealt with.
+      if (window.history && window.history.replaceState) {
+        window.history.replaceState(null, "", window.location.pathname + window.location.search);
+      } else {
+        window.location.hash = "";
+      }
     } else {
-      window.location.hash = "";
+      id = recentlyFiredReminder(list);
     }
+    if (id === null || id === focusedReminder) return;
+    var row = document.getElementById("reminder-" + id);
+    if (!row) return;
+    focusedReminder = id;
     row.classList.add("linked");
     if (row.scrollIntoView) row.scrollIntoView({ block: "center" });
     window.setTimeout(function () { row.classList.remove("linked"); }, 6000);
+  }
+
+  // The enabled series that alerted most recently, if that was within the last
+  // hour — long enough to cover "the phone buzzed, I got to it when I could",
+  // short enough that opening the app later doesn't point at a stale alert.
+  function recentlyFiredReminder(list) {
+    var best = null, bestAt = 0;
+    var cutoff = Date.now() - 3600 * 1000;
+    (list || []).forEach(function (r) {
+      if (!r.enabled || !r.last_fired_at) return;
+      var at = Date.parse(r.last_fired_at);
+      if (isNaN(at) || at < cutoff || at <= bestAt) return;
+      best = String(r.id); bestAt = at;
+    });
+    return best;
   }
 
   function loadReminders() {
     var card = document.getElementById("reminders-card");
     if (!card || !visible("card.reminders")) return Promise.resolve();
     return apiGet("api/reminders")
-      .then(function (d) { renderReminders(d.reminders || []); focusLinkedReminder(); })
+      .then(function (d) {
+        var list = d.reminders || [];
+        renderReminders(list);
+        focusLinkedReminder(list);
+      })
       .catch(function () {});
   }
 

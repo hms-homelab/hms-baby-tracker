@@ -36,21 +36,34 @@ it to mean: six hours from the dose that was given.
 
 ## 3. Design
 
-### 3.1 The link
+### 3.1 The link, and why it is not enough
 
 `_fire_series` asks an optional resolver for a URL and puts it on the alert as
 `url`:
 
 ```
-/hassio/ingress/<slug>#reminder=<id>
+/<slug>#reminder=<id>
 ```
 
 `main.py` supplies the resolver from the Supervisor slug it already fetches for
 the Configuration link; standalone there is no Supervisor and no HA to open, so
-the resolver returns nothing and the alert simply carries no `url`. The web UI
-reads `#reminder=<id>` after the Reminders card renders, scrolls that row into
-view and marks it for a few seconds, then clears the fragment so a later refresh
-does not keep re-highlighting a series already dealt with.
+the resolver returns nothing and the alert simply carries no `url`.
+
+Two things about that path were wrong in 2026.5.2 and are worth writing down,
+because both look fine until you open it on a real instance:
+
+- It is `/<slug>`, **not** `/hassio/ingress/<slug>`. The latter returns 404.
+- **A fragment cannot reach the app under Ingress.** Home Assistant renders an
+  add-on panel as an iframe of `/api/hassio_ingress/<session>/`, built from a
+  per-session token and carrying no fragment. `/<slug>#reminder=2` leaves the
+  hash on the parent page; the app inside the iframe sees a bare URL.
+
+So the fragment cannot be the mechanism. `focusLinkedReminder` honours it when it
+is there (opening the app directly, or standalone) and otherwise falls back to
+the enabled series with the most recent `last_fired_at` inside the last hour —
+which is exactly the one whose notification was just tapped. No new server state:
+`last_fired_at` is already on the row. Either way the row is scrolled into view
+and marked for a few seconds, once per page load.
 
 ### 3.2 Re-anchoring, and why the record carries the series id
 

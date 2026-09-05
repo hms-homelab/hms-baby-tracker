@@ -214,10 +214,16 @@ def create_app(cfg: Config | None = None) -> FastAPI:
         return _slug["v"]
 
     async def reminder_deep_link(rid: int) -> str | None:
-        """Where a reminder alert should take you: the add-on's Ingress page,
-        with the series in the fragment so the UI opens on it (SDD-008)."""
+        """Where a reminder alert should take you (SDD-008).
+
+        `/<slug>` is the add-on's Ingress panel. NOT `/hassio/ingress/<slug>`,
+        which 404s. The fragment only helps outside Ingress: the panel iframes
+        `/api/hassio_ingress/<session>/` and does not pass a fragment through, so
+        the UI cannot rely on it — see `focusLinkedReminder` in web/app.js, which
+        falls back to the series that just fired.
+        """
         slug = await addon_slug()
-        return f"/hassio/ingress/{slug}#reminder={int(rid)}" if slug else None
+        return f"/{slug}#reminder={int(rid)}" if slug else None
 
     reminders.deep_link = reminder_deep_link
 
