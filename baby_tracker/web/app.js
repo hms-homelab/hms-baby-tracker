@@ -722,11 +722,30 @@
     title.focus();
   }
 
+  // A phone alert links here as #reminder=<id> (SDD-008). Scroll that series
+  // into view and mark it, so the tap lands on the record that called you
+  // instead of the top of the app. Consumed once: the hash is cleared so a
+  // later refresh doesn't keep re-highlighting a series you already dealt with.
+  function focusLinkedReminder() {
+    var m = /(?:^|[#&])reminder=(\d+)/.exec(window.location.hash || "");
+    if (!m) return;
+    var row = document.getElementById("reminder-" + m[1]);
+    if (!row) return;
+    if (window.history && window.history.replaceState) {
+      window.history.replaceState(null, "", window.location.pathname + window.location.search);
+    } else {
+      window.location.hash = "";
+    }
+    row.classList.add("linked");
+    if (row.scrollIntoView) row.scrollIntoView({ block: "center" });
+    window.setTimeout(function () { row.classList.remove("linked"); }, 6000);
+  }
+
   function loadReminders() {
     var card = document.getElementById("reminders-card");
     if (!card || !visible("card.reminders")) return Promise.resolve();
     return apiGet("api/reminders")
-      .then(function (d) { renderReminders(d.reminders || []); })
+      .then(function (d) { renderReminders(d.reminders || []); focusLinkedReminder(); })
       .catch(function () {});
   }
 
@@ -755,6 +774,8 @@
     list.forEach(function (r) {
       var li = document.createElement("li");
       li.className = "reminder-row" + (r.enabled ? "" : " off");
+      // Target for a #reminder=<id> deep link from a phone alert (SDD-008).
+      li.id = "reminder-" + r.id;
 
       var head = document.createElement("div");
       head.className = "reminder-head";
@@ -792,6 +813,18 @@
 
       var actions = document.createElement("div");
       actions.className = "reminder-actions";
+      // Log the dose this series is asking for. The record carries the series
+      // id, which restarts the countdown from now (SDD-008) — the same thing
+      // the phone alert's "Log it" button does.
+      if (r.enabled) {
+        actions.appendChild(supplyBtn(t("rem.log"), "s-log", function () {
+          apiPost("api/reminders/" + r.id + "/log", {})
+            .then(function () { setStatus(t("status.doseLogged", { name: r.title })); })
+            .then(refresh)
+            .then(loadReminders)
+            .catch(function (err) { setStatus(t("err.failed", { msg: err.message }), true); });
+        }));
+      }
       actions.appendChild(supplyBtn(r.enabled ? t("rem.pause") : t("rem.resume"),
         "s-refill", function () {
           apiPatch("api/reminders/" + r.id, { enabled: !r.enabled })

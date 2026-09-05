@@ -309,3 +309,210 @@ def test_series_survive_a_restart(tmp_path, monkeypatch):
         rows = c.get("/api/reminders").json()["reminders"]
         assert len(rows) == 1 and rows[0]["id"] == rid
         assert rows[0]["next_run"], "series was not re-armed after restart"
+
+
+# --- SDD-008: log from the alert, re-anchor the countdown ------------------
+
+def test_logging_a_dose_restarts_the_interval(client):
+    """The whole point of SDD-008: "every 6h" must mean six hours from the dose
+    actually given, not from the grid the series was armed on."""
+    r = client.post("/api/reminders", json={"title": "Tylenol", "mode": "interval",
+                                            "interval_min": 360,
+                                            "event_type": "medicine",
+                                            "event_subtype": "oral"}).json()
+    rid = r["reminder"]["id"]
+    first = parse_iso(r["reminder"]["next_run"])
+
+    logged = client.post(f"/api/reminders/{rid}/log")
+    assert logged.status_code == 200
+    body = logged.json()
+    assert body["ok"] is True
+
+    # The record exists, is tagged with the series, and reads as a real event.
+    ev = body["event"]
+    assert ev["event_type"] == "medicine"
+    assert ev["event_subtype"] == "oral"
+    assert ev["reminder_id"] == rid
+    assert ev["note"] == "Tylenol"
+
+    # ...and the countdown now runs from that record.
+    after = parse_iso(body["next_run"])
+    assert after is not None and first is not None
+    assert after > first
+    expected = dt.datetime.now(dt.timezone.utc) + dt.timedelta(minutes=360)
+    assert abs((after - expected).total_seconds()) < 90
+
+
+def test_logged_dose_shows_up_in_the_journal(client):
+    rid = client.post("/api/reminders", json={"title": "Amoxicillin", "mode": "interval",
+                                              "interval_min": 720,
+                                              "event_type": "medicine"}).json()["reminder"]["id"]
+    client.post(f"/api/reminders/{rid}/log")
+    entries = client.get("/api/log").json()["entries"]
+    assert any(e["event_type"] == "medicine" and e["note"] == "Amoxicillin"
+               for e in entries)
+
+
+def test_only_the_tagged_series_reanchors(client):
+    """Two medicine series must not reset each other (the reason the record
+    carries a reminder_id instead of matching on event_type)."""
+    a = client.post("/api/reminders", json={"title": "Tylenol", "mode": "interval",
+                                            "interval_min": 360,
+                                            "event_type": "medicine"}).json()["reminder"]
+    b = client.post("/api/reminders", json={"title": "Amoxicillin", "mode": "interval",
+                                            "interval_min": 720,
+                                            "event_type": "medicine"}).json()["reminder"]
+    b_before = client.get("/api/reminders").json()["reminders"]
+    b_next = [x for x in b_before if x["id"] == b["id"]][0]["next_run"]
+
+    client.post(f"/api/reminders/{a['id']}/log")
+
+    after = client.get("/api/reminders").json()["reminders"]
+    assert [x for x in after if x["id"] == b["id"]][0]["next_run"] == b_next
+
+
+def test_plain_medicine_log_does_not_reanchor(client):
+    """A dose logged from the journal carries no series id, so it leaves every
+    countdown alone (the rule Albin picked over 'any matching event')."""
+    rid = client.post("/api/reminders", json={"title": "Tylenol", "mode": "interval",
+                                              "interval_min": 360,
+                                              "event_type": "medicine"}).json()["reminder"]["id"]
+    before = client.get("/api/reminders").json()["reminders"][0]["next_run"]
+    client.post("/api/event", json={"event_type": "medicine"})
+    after = client.get("/api/reminders").json()["reminders"][0]["next_run"]
+    assert after == before
+
+
+def test_daily_series_is_not_reanchored(client):
+    """A daily series is a wall-clock time; logging a dose must not drag it."""
+    rid = client.post("/api/reminders", json={"title": "Vitamin D", "mode": "daily",
+                                              "at_time": "09:00",
+                                              "event_type": "medicine"}).json()["reminder"]["id"]
+    before = client.get("/api/reminders").json()["reminders"][0]["next_run"]
+    body = client.post(f"/api/reminders/{rid}/log").json()
+    assert body["ok"] is True
+    after = client.get("/api/reminders").json()["reminders"][0]["next_run"]
+    assert after == before
+
+
+def test_snooze_moves_only_the_next_fire(client):
+    rid = client.post("/api/reminders", json={"title": "Tylenol", "mode": "interval",
+                                              "interval_min": 360,
+                                              "event_type": "medicine"}).json()["reminder"]["id"]
+    body = client.post(f"/api/reminders/{rid}/snooze", params={"minutes": 20}).json()
+    assert body["ok"] is True
+    nxt = parse_iso(body["next_run"])
+    expected = dt.datetime.now(dt.timezone.utc) + dt.timedelta(minutes=20)
+    assert abs((nxt - expected).total_seconds()) < 90
+    # The row itself is untouched — a snooze is not a dose.
+    row = client.get("/api/reminders").json()["reminders"][0]
+    assert row["fire_count"] == 0
+
+
+def test_log_and_snooze_404_on_a_missing_series(client):
+    assert client.post("/api/reminders/999/log").status_code == 404
+    assert client.post("/api/reminders/999/snooze").status_code == 404
+
+
+def test_alert_carries_a_deep_link_when_one_is_available(tmp_path):
+    """The alert an HA automation turns into a notification must carry the URL
+    that opens the app on this series."""
+    db = _db(tmp_path)
+    asyncio.run(db.init())
+    mqtt = FakeMqtt()
+    rem = Reminders(_cfg(tmp_path), mqtt=mqtt, db=db)
+
+    async def link(rid):
+        return f"/hassio/ingress/abc_baby_tracker#reminder={rid}"
+
+    rem.deep_link = link
+    row = asyncio.run(db.insert_reminder({"title": "Tylenol", "mode": "interval",
+                                          "interval_min": 360,
+                                          "event_type": "medicine"}))
+    asyncio.run(rem._fire_series(row["id"]))
+    extra = mqtt.alerts[0]["extra"]
+    assert extra["url"] == f"/hassio/ingress/abc_baby_tracker#reminder={row['id']}"
+    assert extra["reminder_id"] == row["id"]
+
+
+def test_alert_without_a_deep_link_resolver_still_fires(tmp_path):
+    """Standalone (no Supervisor): no URL, but the alert still goes out."""
+    db = _db(tmp_path)
+    asyncio.run(db.init())
+    mqtt = FakeMqtt()
+    rem = Reminders(_cfg(tmp_path), mqtt=mqtt, db=db)
+    row = asyncio.run(db.insert_reminder({"title": "Tylenol", "mode": "interval",
+                                          "interval_min": 360}))
+    asyncio.run(rem._fire_series(row["id"]))
+    assert mqtt.alerts and "url" not in mqtt.alerts[0]["extra"]
+
+
+def test_reminder_id_survives_export_and_restore(tmp_path):
+    db = _db(tmp_path)
+    asyncio.run(db.init())
+    asyncio.run(db.insert_event("medicine", None, "Tylenol", None, None, None, 7))
+    rows = asyncio.run(db.recent(10))
+    assert rows[0]["reminder_id"] == 7
+
+
+def test_reminder_id_round_trips_through_backup(client):
+    rid = client.post("/api/reminders", json={"title": "Tylenol", "mode": "interval",
+                                              "interval_min": 360,
+                                              "event_type": "medicine"}).json()["reminder"]["id"]
+    client.post(f"/api/reminders/{rid}/log")
+    dump = client.get("/api/export").json()
+    rows = dump["tables"]["baby_events"] if "tables" in dump else dump["baby_events"]
+    assert any(r.get("reminder_id") == rid for r in rows)
+
+
+def test_mqtt_action_topic_dispatches_log_and_snooze(tmp_path):
+    """The phone's buttons arrive as MQTT; make sure the bridge routes them."""
+    from app.mqtt import MqttBridge, REMINDER_ACTION_TOPIC
+    import json as _json
+
+    bridge = MqttBridge(_cfg(tmp_path))
+    seen = []
+
+    async def on_action(action, rid, minutes):
+        seen.append((action, rid, minutes))
+
+    bridge.on_reminder_action = on_action
+    asyncio.run(bridge._handle(REMINDER_ACTION_TOPIC,
+                               _json.dumps({"action": "log", "reminder_id": "4"}).encode()))
+    asyncio.run(bridge._handle(REMINDER_ACTION_TOPIC,
+                               _json.dumps({"action": "SNOOZE", "reminder_id": 4,
+                                            "minutes": 20}).encode()))
+    # Defaults to "log", and a payload with no id is ignored rather than crashing.
+    asyncio.run(bridge._handle(REMINDER_ACTION_TOPIC,
+                               _json.dumps({"reminder_id": 9}).encode()))
+    asyncio.run(bridge._handle(REMINDER_ACTION_TOPIC, b'{"action": "log"}'))
+    assert seen == [("log", 4, None), ("snooze", 4, 20), ("log", 9, None)]
+
+
+def test_mqtt_action_topic_never_logs_an_event(tmp_path):
+    """A reminder action must not fall through to the ordinary event path."""
+    from app.mqtt import MqttBridge, REMINDER_ACTION_TOPIC
+
+    bridge = MqttBridge(_cfg(tmp_path))
+    events = []
+
+    async def on_event(*a, **k):
+        events.append(a)
+
+    bridge.on_event = on_event
+    asyncio.run(bridge._handle(REMINDER_ACTION_TOPIC, b'{"action":"log","reminder_id":1}'))
+    assert events == []
+
+
+def test_journal_entry_reports_the_series_it_came_from(client):
+    """/api/log must carry reminder_id through, so the UI can tell a dose logged
+    from a reminder apart from one logged by hand."""
+    rid = client.post("/api/reminders", json={"title": "Tylenol", "mode": "interval",
+                                              "interval_min": 360,
+                                              "event_type": "medicine"}).json()["reminder"]["id"]
+    client.post(f"/api/reminders/{rid}/log")
+    client.post("/api/event", json={"event_type": "medicine", "note": "by hand"})
+    entries = client.get("/api/log").json()["entries"]
+    tagged = {e["note"]: e["reminder_id"] for e in entries if e["event_type"] == "medicine"}
+    assert tagged["Tylenol"] == rid
+    assert tagged["by hand"] is None

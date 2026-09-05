@@ -78,13 +78,16 @@ def _parse(iso: str) -> dt.datetime:
 
 async def create_event(db, cfg, event_type: str, event_subtype: str | None = None,
                         note: str | None = None, logged_at: str | None = None,
-                        value: float | None = None, value_unit: str | None = None) -> dict:
+                        value: float | None = None, value_unit: str | None = None,
+                        reminder_id: int | None = None) -> dict:
     """Persist an event; return the stored row + formatted title/message.
 
     `logged_at` (ISO8601) backfills a missed event at a past time; omit it for
     `now()`. For a backfilled sleep event pass an explicit start/end subtype —
     the start<->end auto-toggle only makes sense for live presses. `value` /
     `value_unit` carry a numeric reading (temperature, weight, length, …).
+    `reminder_id` marks the row as the dose a reminder series asked for, which
+    re-anchors that series' countdown (SDD-008).
     """
     if event_type == "sleep":
         event_subtype = await resolve_sleep_subtype(db, event_subtype)
@@ -96,7 +99,7 @@ async def create_event(db, cfg, event_type: str, event_subtype: str | None = Non
                                   getattr(cfg, "time_format", "12h"))
 
     row_id = await db.insert_event(event_type, event_subtype, note, logged_at,
-                                   value, value_unit)
+                                   value, value_unit, reminder_id)
     return {
         "id": row_id,
         "event_type": event_type,
@@ -105,6 +108,7 @@ async def create_event(db, cfg, event_type: str, event_subtype: str | None = Non
         "logged_at": logged_at,
         "value": value,
         "value_unit": value_unit,
+        "reminder_id": reminder_id,
         "title": title,
         "message": message,
     }

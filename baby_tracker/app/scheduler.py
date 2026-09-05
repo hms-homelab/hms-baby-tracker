@@ -69,6 +69,10 @@ class Reminders:
         self.mqtt = mqtt  # MqttBridge, for device display/reminder/alert
         self.db = db      # Database, for the periodic display poll
         self.sched = AsyncIOScheduler(timezone="UTC")
+        # Optional `async (rid) -> str | None` returning a tappable link to the
+        # series in the web UI. Set by main.py once the add-on knows its own
+        # Supervisor slug; stays None standalone, where there is no HA to open.
+        self.deep_link = None
 
     def start(self) -> None:
         if not self.sched.running:
@@ -209,6 +213,54 @@ class Reminders:
         run_at = getattr(job, "next_run_time", None) if job else None
         return run_at.isoformat() if run_at else None
 
+    async def reanchor_series(self, rid) -> str | None:
+        """Restart a series' countdown from now, because the dose it was asking
+        for was just logged (SDD-008).
+
+        Without this, "every 6h" runs on the grid it was armed on: give the dose
+        40 minutes late and the next alert is still only 5h20m away, and the gap
+        keeps shrinking every time. Re-anchoring makes the interval mean what a
+        parent reads it to mean — six hours from the dose actually given.
+
+        Daily series are a fixed wall-clock time, so there is nothing to move:
+        they are left alone. Returns the new next-run ISO string, or None.
+        """
+        if self.db is None:
+            return None
+        try:
+            row = await self.db.get_reminder(rid)
+        except Exception as e:
+            log.warning("reminder #%s lookup failed: %s", rid, e)
+            return None
+        if not row or not row.get("enabled"):
+            return None
+        if (row.get("mode") or "interval") == "daily":
+            return self.series_next_run(rid)
+        now = dt.datetime.now(dt.timezone.utc).isoformat()
+        with contextlib.suppress(Exception):
+            await self.db.update_reminder(rid, start_at=now)
+        self.schedule_series({**row, "start_at": now})
+        nxt = self.series_next_run(rid)
+        log.info("re-anchored reminder series #%s (%s) next=%s", rid,
+                 row.get("title"), nxt)
+        return nxt
+
+    def snooze_series(self, rid, minutes: int = 15) -> str | None:
+        """Push a series' next alert out by `minutes` without logging a dose.
+
+        Only the pending fire moves; the row is untouched, so a series that is
+        snoozed and then never logged still carries on from the snoozed alert.
+        """
+        minutes = max(1, int(minutes))
+        job = self.sched.get_job(self.series_job_id(rid))
+        if job is None:
+            return None
+        when = dt.datetime.now(dt.timezone.utc) + dt.timedelta(minutes=minutes)
+        with contextlib.suppress(Exception):
+            job.modify(next_run_time=when)
+        log.info("snoozed reminder series #%s for %sm -> %s", rid, minutes, when)
+        return self.series_next_run(rid)
+
     async def load_series(self) -> None:
         """Re-arm every stored series on startup (jobs live in memory only)."""
         if self.db is None:
@@ -255,14 +307,19 @@ class Reminders:
         else:
             message = self._t("alert.reminderMsg", title=name,
                               every=every_text(row.get("interval_min") or 0))
+        extra = {"reminder_id": int(rid), "reminder_title": name,
+                 "event_type": row.get("event_type"),
+                 "event_subtype": row.get("event_subtype")}
+        # A tappable link straight to this series in the web UI, so the alert
+        # lands on the record instead of the app's front door (SDD-008).
+        if self.deep_link is not None:
+            with contextlib.suppress(Exception):
+                url = await self.deep_link(int(rid))
+                if url:
+                    extra["url"] = url
         if self.mqtt is not None:
             with contextlib.suppress(Exception):
-                await self.mqtt.publish_alert(
-                    "reminder", title, message,
-                    {"reminder_id": int(rid), "reminder_title": name,
-                     "event_type": row.get("event_type"),
-                     "event_subtype": row.get("event_subtype")},
-                )
+                await self.mqtt.publish_alert("reminder", title, message, extra)
         with contextlib.suppress(Exception):
             await self.db.update_reminder(
                 rid, last_fired_at=now.isoformat(),

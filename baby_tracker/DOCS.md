@@ -210,6 +210,7 @@ the following topics.
 | ------------------- | ------------------------------------------------ | -------------------------------------------------------- |
 | `baby/remote/event` | `{"event_type": "...", "event_subtype": "..."}`  | Log an event from the ESP32 remote or an HA button.      |
 | `baby/note`         | `{"message": "..."}`                             | Log a free-text note.                                    |
+| `baby/reminder/action` | `{"action": "log"\|"snooze", "reminder_id": N, "minutes": M}` | What a phone did with a reminder alert (SDD-008). `log` records the dose and restarts that series' countdown; `snooze` moves only the next alert (default 15m). |
 
 `event_type` values and their UI icons:
 `feed` 🍼, `diaper` 🧷, `sleep` 😴, `bath` 🛁, `medicine` 💊,
@@ -236,7 +237,7 @@ mosquitto_pub -t baby/remote/event \
 | `baby/remote/reminder` | no       | `{"l1","l2","secs"}` transient OLED banner — pushed when a feed reminder fires. |
 | `baby/remote/history/replay` | no | `{"events":[…],"done":bool}` — chunked history backfill (see below).      |
 | `baby/assessment`      | yes      | `{"text","time"}` — the Contraction AI assessment (only when `ollama_enabled`). |
-| `baby/alert`           | no       | **Unified notifications bus** — `{"kind","title","message",…}` for every actionable alert. `kind` ∈ `fever`, `supply_low`, `supply_due`, `feed_reminder`, `pump_reminder`, `reminder`. Subscribe once and branch on `kind`. |
+| `baby/alert`           | no       | **Unified notifications bus** — `{"kind","title","message",…}` for every actionable alert. `kind` ∈ `fever`, `supply_low`, `supply_due`, `feed_reminder`, `pump_reminder`, `reminder`. Subscribe once and branch on `kind`. A `reminder` also carries `reminder_id`, `reminder_title` and a `url` deep link to the series. |
 | `baby/supply/reminder` | no       | `{"title","message","supply"}` — legacy alias of the supply alerts on `baby/alert` (kept for 2026.4.0 automations). |
 | `baby/summary`         | yes      | `{"text","time","source"}` — the latest AI daily summary (only when `summary_enabled`). |
 
@@ -392,7 +393,66 @@ series appear in the **Reminders** card with their next fire, where you can
 restart, and one that comes due while the add-on is restarting still fires as
 long as it is less than an hour late.
 
-Each fire publishes on the `baby/alert` bus, so the automation you already use
+### Acting on a reminder from the notification (SDD-008)
+
+Every fire carries a `url` deep link to the series in the web UI, plus its
+`reminder_id`, so the notification can do more than tell you something is due:
+
+```yaml
+automation:
+  - alias: Baby reminder notification
+    trigger:
+      - platform: mqtt
+        topic: baby/alert
+    condition:
+      - "{{ trigger.payload_json.kind == 'reminder' }}"
+    action:
+      - service: notify.mobile_app_pixel_8
+        data:
+          title: "{{ trigger.payload_json.title }}"
+          message: "{{ trigger.payload_json.message }}"
+          data:
+            url: "{{ trigger.payload_json.url }}"
+            action_data:
+              reminder_id: "{{ trigger.payload_json.reminder_id }}"
+            actions:
+              - action: BABY_REMINDER_LOG
+                title: Log it
+              - action: BABY_REMINDER_SNOOZE
+                title: Snooze 15m
+
+  # The buttons come back as an event; hand them to the add-on over MQTT.
+  - alias: Baby reminder buttons
+    trigger:
+      - platform: event
+        event_type: mobile_app_notification_action
+    condition:
+      - "{{ trigger.event.data.action in ['BABY_REMINDER_LOG', 'BABY_REMINDER_SNOOZE'] }}"
+    action:
+      - service: mqtt.publish
+        data:
+          topic: baby/reminder/action
+          payload: >-
+            {{ {'action': 'snooze' if trigger.event.data.action == 'BABY_REMINDER_SNOOZE' else 'log',
+                'reminder_id': trigger.event.data.reminder_id | int,
+                'minutes': 15} | to_json }}
+```
+
+**Log it** writes the record the series is asking for (its event type, subtype
+and title), tagged with the series id — and that tag restarts the countdown, so
+"every 6h" means six hours from the dose actually given rather than from the
+grid the series was armed on. A dose logged from the journal carries no tag and
+re-anchors nothing, which is what keeps two `medicine` series (say Tylenol and
+an antibiotic) from resetting each other. Daily series are a fixed wall-clock
+time and are never dragged. **Snooze** moves only the pending alert; it is not a
+dose, so it does not touch the row or the fire count.
+
+The same thing is available as `POST api/reminders/{id}/log` and
+`POST api/reminders/{id}/snooze?minutes=15`, and as a **Log it** button on every
+armed series in the Reminders card.
+
+If you would rather keep one plain automation, the older form still works —
+every fire publishes on the `baby/alert` bus, so the automation you already use
 for pump/feed/supply reminders delivers these too:
 
 ```yaml

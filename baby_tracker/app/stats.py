@@ -115,6 +115,9 @@ def compute(rows: list[dict], timezone: str = "America/New_York",
             "time": r.get("time"),
             "value": r.get("value"),
             "value_unit": r.get("value_unit"),
+            # The series this dose was logged from, if any (SDD-008), so the
+            # journal can tell a reminder-logged row from a hand-logged one.
+            "reminder_id": r.get("reminder_id"),
         }
         for r in rows[:50]
     ]

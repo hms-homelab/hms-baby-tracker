@@ -33,6 +33,11 @@ EVENT_TOPIC = "baby/remote/event"
 # remote). Distinct from the INbound EVENT_TOPIC to avoid a re-ingest loop.
 LOGGED_EVENT_TOPIC = "baby/event"
 NOTE_TOPIC = "baby/note"
+# Inbound: what a phone did with a reminder alert (SDD-008). An HA automation
+# turns the notification's action buttons into {"action":"log"|"snooze",
+# "reminder_id":N,"minutes":M} here. MQTT rather than REST because Ingress needs
+# a session the notification action has no way to hold.
+REMINDER_ACTION_TOPIC = "baby/reminder/action"
 HISTORY_REQUEST_TOPIC = "baby/remote/history/request"
 HISTORY_REPLAY_TOPIC = "baby/remote/history/replay"
 DISPLAY_TOPIC = "baby/remote/display"
@@ -103,6 +108,7 @@ class MqttBridge:
         self._client: aiomqtt.Client | None = None
         self.on_event = None    # async (event_type, subtype, note, source, logged_at=None, value=None, value_unit=None) -> None
         self.on_connect = None  # async () -> None, called once per (re)connect
+        self.on_reminder_action = None  # async (action, reminder_id, minutes) -> None
 
     @property
     def enabled(self) -> bool:
@@ -131,6 +137,7 @@ class MqttBridge:
                     await client.subscribe(EVENT_TOPIC)
                     await client.subscribe(NOTE_TOPIC)
                     await client.subscribe(HISTORY_REQUEST_TOPIC)
+                    await client.subscribe(REMINDER_ACTION_TOPIC)
                     log.info("MQTT connected to %s:%s", self.cfg.mqtt_host, self.cfg.mqtt_port)
                     if self.on_connect:
                         with contextlib.suppress(Exception):
@@ -149,6 +156,14 @@ class MqttBridge:
             data = {"message": payload.decode(errors="replace")}
         if topic == HISTORY_REQUEST_TOPIC:
             await self.handle_history_request(data)
+            return
+        if topic == REMINDER_ACTION_TOPIC:
+            rid = data.get("reminder_id")
+            if self.on_reminder_action and rid is not None:
+                with contextlib.suppress(TypeError, ValueError):
+                    await self.on_reminder_action(
+                        str(data.get("action") or "log").lower(),
+                        int(rid), data.get("minutes"))
             return
         if not self.on_event:
             return

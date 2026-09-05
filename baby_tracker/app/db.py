@@ -60,7 +60,8 @@ REMINDER_FIELDS = (
 # export_all / import_all. `id` is intentionally excluded so a restore reassigns
 # fresh primary keys (no sequence surgery, no clashes with existing rows).
 EXPORT_TABLES = {
-    "baby_events": ("event_type", "event_subtype", "note", "logged_at", "value", "value_unit"),
+    "baby_events": ("event_type", "event_subtype", "note", "logged_at", "value",
+                    "value_unit", "reminder_id"),
     "baby_supplies": SUPPLY_FIELDS,
     "baby_checklist": ("label", "position", "done", "done_at", "updated_at"),
     "baby_summaries": ("text", "provider", "source", "generated_at", "day"),
@@ -147,7 +148,11 @@ CREATE TABLE IF NOT EXISTS baby_events (
     note          TEXT,
     logged_at     TEXT NOT NULL,
     value         REAL,
-    value_unit    TEXT
+    value_unit    TEXT,
+    -- The reminder series this row was logged from, when it was (SDD-008).
+    -- Only a row carrying it re-anchors that series' countdown, so two medicine
+    -- series never reset each other. NULL for every ordinary log.
+    reminder_id   INTEGER
 );
 CREATE INDEX IF NOT EXISTS idx_baby_events_logged_at ON baby_events (logged_at DESC);
 CREATE INDEX IF NOT EXISTS idx_baby_events_type ON baby_events (event_type);
@@ -235,6 +240,8 @@ class SqliteDatabase:
                 await db.execute("ALTER TABLE baby_events ADD COLUMN value REAL")
             if "value_unit" not in cols:
                 await db.execute("ALTER TABLE baby_events ADD COLUMN value_unit TEXT")
+            if "reminder_id" not in cols:
+                await db.execute("ALTER TABLE baby_events ADD COLUMN reminder_id INTEGER")
             if fresh:
                 now = _now_iso()
                 labels = default_checklist() if seed is None else seed
@@ -253,6 +260,7 @@ class SqliteDatabase:
         logged_at: str | None = None,
         value: float | None = None,
         value_unit: str | None = None,
+        reminder_id: int | None = None,
     ) -> int:
         import aiosqlite
 
@@ -260,9 +268,9 @@ class SqliteDatabase:
         async with aiosqlite.connect(self.path) as db:
             cur = await db.execute(
                 "INSERT INTO baby_events (event_type, event_subtype, note, logged_at, "
-                "value, value_unit) VALUES (?, ?, ?, ?, ?, ?)",
+                "value, value_unit, reminder_id) VALUES (?, ?, ?, ?, ?, ?, ?)",
                 (event_type, event_subtype or None, note or None, logged_at,
-                 value, value_unit or None),
+                 value, value_unit or None, reminder_id),
             )
             await db.commit()
             return cur.lastrowid
@@ -274,7 +282,7 @@ class SqliteDatabase:
         async with aiosqlite.connect(self.path) as db:
             db.row_factory = aiosqlite.Row
             cur = await db.execute(
-                "SELECT id, event_type, event_subtype, note, logged_at, value, value_unit "
+                "SELECT id, event_type, event_subtype, note, logged_at, value, value_unit, reminder_id "
                 "FROM baby_events ORDER BY logged_at DESC LIMIT ?",
                 (limit,),
             )
@@ -292,7 +300,7 @@ class SqliteDatabase:
         async with aiosqlite.connect(self.path) as db:
             db.row_factory = aiosqlite.Row
             cur = await db.execute(
-                "SELECT id, event_type, event_subtype, note, logged_at, value, value_unit "
+                "SELECT id, event_type, event_subtype, note, logged_at, value, value_unit, reminder_id "
                 "FROM baby_events WHERE event_type = ? ORDER BY logged_at DESC LIMIT 1",
                 (event_type,),
             )
@@ -324,7 +332,7 @@ class SqliteDatabase:
         async with aiosqlite.connect(self.path) as db:
             db.row_factory = aiosqlite.Row
             cur = await db.execute(
-                "SELECT id, event_type, event_subtype, note, logged_at, value, value_unit "
+                "SELECT id, event_type, event_subtype, note, logged_at, value, value_unit, reminder_id "
                 "FROM baby_events WHERE id = ?",
                 (event_id,),
             )
@@ -369,7 +377,7 @@ class SqliteDatabase:
         async with aiosqlite.connect(self.path) as db:
             db.row_factory = aiosqlite.Row
             cur = await db.execute(
-                "SELECT id, event_type, event_subtype, note, logged_at, value, value_unit "
+                "SELECT id, event_type, event_subtype, note, logged_at, value, value_unit, reminder_id "
                 "FROM baby_events ORDER BY logged_at ASC"
             )
             rows = await cur.fetchall()
@@ -727,13 +735,16 @@ CREATE TABLE IF NOT EXISTS baby_events (
     note          text,
     logged_at     timestamptz NOT NULL DEFAULT now(),
     value         real,
-    value_unit    text
+    value_unit    text,
+    -- See the SQLite schema: the series this row was logged from (SDD-008).
+    reminder_id   bigint
 );
 CREATE INDEX IF NOT EXISTS idx_baby_events_logged_at ON baby_events (logged_at DESC);
 CREATE INDEX IF NOT EXISTS idx_baby_events_type ON baby_events (event_type);
 -- Migration for a pre-existing baby_events archive (additive, safe).
 ALTER TABLE baby_events ADD COLUMN IF NOT EXISTS value real;
 ALTER TABLE baby_events ADD COLUMN IF NOT EXISTS value_unit text;
+ALTER TABLE baby_events ADD COLUMN IF NOT EXISTS reminder_id bigint;
 
 CREATE TABLE IF NOT EXISTS baby_supplies (
     id                    bigserial PRIMARY KEY,
@@ -844,15 +855,17 @@ class PostgresDatabase:
         logged_at: str | None = None,
         value: float | None = None,
         value_unit: str | None = None,
+        reminder_id: int | None = None,
     ) -> int:
         when = _parse(logged_at) if logged_at else dt.datetime.now(dt.timezone.utc)
         pool = await self._get_pool()
         async with pool.acquire() as con:
             row = await con.fetchrow(
                 "INSERT INTO baby_events (event_type, event_subtype, note, logged_at, "
-                "value, value_unit) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id",
+                "value, value_unit, reminder_id) VALUES ($1, $2, $3, $4, $5, $6, $7) "
+                "RETURNING id",
                 event_type, event_subtype or None, note or None, when,
-                value, value_unit or None,
+                value, value_unit or None, reminder_id,
             )
         return int(row["id"])
 
@@ -870,7 +883,7 @@ class PostgresDatabase:
         pool = await self._get_pool()
         async with pool.acquire() as con:
             rows = await con.fetch(
-                "SELECT id, event_type, event_subtype, note, logged_at, value, value_unit "
+                "SELECT id, event_type, event_subtype, note, logged_at, value, value_unit, reminder_id "
                 "FROM baby_events ORDER BY logged_at DESC LIMIT $1",
                 limit,
             )
@@ -885,7 +898,7 @@ class PostgresDatabase:
         pool = await self._get_pool()
         async with pool.acquire() as con:
             r = await con.fetchrow(
-                "SELECT id, event_type, event_subtype, note, logged_at, value, value_unit "
+                "SELECT id, event_type, event_subtype, note, logged_at, value, value_unit, reminder_id "
                 "FROM baby_events WHERE event_type = $1 ORDER BY logged_at DESC LIMIT 1",
                 event_type,
             )
@@ -913,7 +926,7 @@ class PostgresDatabase:
         pool = await self._get_pool()
         async with pool.acquire() as con:
             r = await con.fetchrow(
-                "SELECT id, event_type, event_subtype, note, logged_at, value, value_unit "
+                "SELECT id, event_type, event_subtype, note, logged_at, value, value_unit, reminder_id "
                 "FROM baby_events WHERE id = $1",
                 int(event_id),
             )

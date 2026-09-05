@@ -108,5 +108,5 @@ def test_entries_shape():
     for e in entries:
         assert set(e.keys()) == {
             "id", "event_type", "event_subtype", "note", "logged_at", "time",
-            "value", "value_unit"
+            "value", "value_unit", "reminder_id"
         }

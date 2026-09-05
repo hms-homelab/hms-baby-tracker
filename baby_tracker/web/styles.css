@@ -417,6 +417,12 @@ html, body {
 }
 .reminder-row:last-child { margin-bottom: 0; }
 .reminder-row.off { opacity: 0.55; }
+/* The series a phone alert deep-linked to (#reminder=<id>), so a half-awake
+   parent can see which of several rows called them. Fades out on its own. */
+.reminder-row.linked {
+  border-color: color-mix(in srgb, var(--glow) 55%, transparent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--glow) 16%, transparent);
+}
 .reminder-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
 .reminder-name { font-size: 14px; font-weight: 700; color: var(--ink); }
 .reminder-next { font-family: var(--mono); font-size: 13px; color: var(--glow); white-space: nowrap; }
@@ -562,6 +568,7 @@ html, body {
 .supply-btn.s-minus, .supply-btn.s-plus { flex: 0 0 44px; font-size: 17px; }
 .supply-btn.s-refill { color: var(--glow); border-color: color-mix(in srgb, var(--glow) 30%, transparent); }
 .supply-btn.s-del { color: #e89b8b; border-color: rgba(232, 155, 139, 0.3); }
+.supply-btn.s-log { color: var(--ink); border-color: color-mix(in srgb, var(--glow) 45%, transparent); background: color-mix(in srgb, var(--glow) 14%, transparent); font-weight: 700; }
 .supply-btn:active { transform: translateY(1px); opacity: 0.9; }
 
 /* ============ Get Ready checklist ============ */

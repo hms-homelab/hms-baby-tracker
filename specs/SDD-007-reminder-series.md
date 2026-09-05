@@ -1,6 +1,6 @@
 # SDD-007: Reminder series (repeat any logged row on a schedule)
 
-Status: IMPLEMENTED, shipped in 2026.5.0
+Status: IMPLEMENTED, shipped in 2026.5.0; amended by SDD-008 (2026.5.2)
 Origin: a sick baby and a 6-hourly Tylenol dose
 Baseline: 2026.4.16
 

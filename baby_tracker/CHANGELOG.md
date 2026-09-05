@@ -1,5 +1,36 @@
 # Changelog
 
+## 2026.5.2 - 2026-09-05
+
+Two defects in the reminder series shipped in 2026.5.0, both found the first
+night of living with one.
+
+- **fixed: "every 6h" now means six hours from the dose you actually gave.** A
+  series fired on the grid it was armed on, whatever time the dose was really
+  given. Wake up twenty minutes late and the next alert was only 5h40m after the
+  dose, and the gap walked in further every night — the number on the screen did
+  not mean what a parent reads it to mean. Logging a dose from its reminder now
+  restarts that series' countdown.
+  - The record carries the series it came from, so a Tylenol series and an
+    antibiotic series never reset each other. A dose logged from the journal
+    carries no series and re-anchors nothing — deliberate, because guessing which
+    of two `medicine` series a row belongs to is worse than not guessing.
+  - A daily series is a wall-clock time and is never dragged. A backfilled past
+    dose never moves a live countdown. A snooze is not a dose: it moves only the
+    pending alert and leaves the row and the fire count alone.
+- **fixed: the alert was a dead end.** It named the series and stopped there, so
+  acting on it meant unlocking the phone, opening Home Assistant, finding the
+  add-on and finding the row — at 3am. Alerts now carry a link that opens the app
+  on the series that called you, plus **Log it** and **Snooze 15m** buttons that
+  work without unlocking into the app.
+  - New inbound topic `baby/reminder/action` carries the button press;
+    `DOCS.md` has the two automations to copy. MQTT rather than REST because an
+    Ingress call needs a session a notification action cannot hold.
+  - Every armed series in the Reminders card gets the same **Log it** button, and
+    `POST api/reminders/{id}/log` / `POST api/reminders/{id}/snooze` expose it.
+- **fixed:** `/api/log` dropped the series a dose was logged from, so the journal
+  could not tell a reminder-logged row from a hand-logged one.
+
 ## 2026.5.1 - 2026-09-04
 
 - **fixed: the remote's pump-due flag no longer lands on the notifications bus.**

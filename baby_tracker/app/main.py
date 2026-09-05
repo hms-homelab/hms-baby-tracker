@@ -213,6 +213,14 @@ def create_app(cfg: Config | None = None) -> FastAPI:
                         _slug["v"] = (r.json().get("data") or {}).get("slug") or ""
         return _slug["v"]
 
+    async def reminder_deep_link(rid: int) -> str | None:
+        """Where a reminder alert should take you: the add-on's Ingress page,
+        with the series in the fragment so the UI opens on it (SDD-008)."""
+        slug = await addon_slug()
+        return f"/hassio/ingress/{slug}#reminder={int(rid)}" if slug else None
+
+    reminders.deep_link = reminder_deep_link
+
     async def auto_summary() -> None:
         with contextlib.suppress(summary.CapReached):
             try:
@@ -222,9 +230,16 @@ def create_app(cfg: Config | None = None) -> FastAPI:
 
     async def ingest_and_broadcast(event_type, event_subtype=None, note=None,
                                    source="api", logged_at=None,
-                                   value=None, value_unit=None):
+                                   value=None, value_unit=None,
+                                   reminder_id=None):
         row = await ingest.create_event(db, cfg, event_type, event_subtype, note,
-                                        logged_at, value, value_unit)
+                                        logged_at, value, value_unit, reminder_id)
+        # The dose a series asked for was just given: restart its countdown from
+        # now, so "every 6h" means six hours from this record (SDD-008). Only a
+        # row carrying the series id counts, so two medicine series never reset
+        # each other, and a backfilled past dose never moves a live countdown.
+        if logged_at is None and reminder_id is not None:
+            await reminders.reanchor_series(int(reminder_id))
         # Reminders are "X minutes from now" — only arm for live events, never for
         # a backfilled past event (logged_at set).
         if logged_at is None and event_type == "pump":
@@ -286,6 +301,16 @@ def create_app(cfg: Config | None = None) -> FastAPI:
                 timezone=cfg.timezone, id="summary_auto", replace_existing=True,
             )
         mqtt.on_event = ingest_and_broadcast
+
+        async def on_reminder_action(action, rid, minutes=None):
+            """Act on a reminder notification's buttons (SDD-008)."""
+            if action == "snooze":
+                reminders.snooze_series(rid, int(minutes or 15))
+                return
+            if await log_series_dose(rid) is None:
+                log.warning("reminder action for unknown series #%s", rid)
+
+        mqtt.on_reminder_action = on_reminder_action
 
         async def on_connect():
             # Re-publish retained state + device display on every (re)connect so a
@@ -569,6 +594,41 @@ def create_app(cfg: Config | None = None) -> FastAPI:
         row = await db.update_reminder(rid, **kwargs)
         reminders.schedule_series(row)
         return {"ok": True, "reminder": _decorate(row)}
+
+    async def log_series_dose(rid: int) -> dict | None:
+        """Log the record a series is asking for, tagged with the series id.
+
+        Shared by the REST endpoint and the MQTT action topic (the phone's
+        "Log it" button). The tag is what re-anchors the countdown, so this is
+        the one path that both records the dose and resets the clock.
+        Returns None when the series is gone.
+        """
+        row = await db.get_reminder(rid)
+        if not row:
+            return None
+        return await ingest_and_broadcast(
+            row.get("event_type") or "medicine",
+            row.get("event_subtype"),
+            row.get("title"),
+            source="reminder",
+            reminder_id=int(rid),
+        )
+
+    @app.post("/api/reminders/{rid}/log")
+    async def log_reminder(rid: int):
+        """Record the dose and restart the countdown (SDD-008)."""
+        event = await log_series_dose(rid)
+        if event is None:
+            return JSONResponse({"ok": False, "error": "not found"}, status_code=404)
+        return {"ok": True, "event": event,
+                "next_run": reminders.series_next_run(rid)}
+
+    @app.post("/api/reminders/{rid}/snooze")
+    async def snooze_reminder(rid: int, minutes: int = 15):
+        """Push the next alert out without logging anything (SDD-008)."""
+        if not await db.get_reminder(rid):
+            return JSONResponse({"ok": False, "error": "not found"}, status_code=404)
+        return {"ok": True, "next_run": reminders.snooze_series(rid, minutes)}
 
     @app.delete("/api/reminders/{rid}")
     async def remove_reminder(rid: int):
