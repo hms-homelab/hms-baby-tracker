@@ -130,3 +130,28 @@ def test_growth_endpoint(client):
     assert [r["value"] for r in g["weight"]] == [4.2, 4.5]
     assert len(g["head_circumference"]) == 1
     assert g["length"] == []
+
+
+def test_device_alert_flag_stays_off_the_notification_bus():
+    """The remote's pump-due LED flag ("1"/"0") and the app-level alert bus are
+    two different topics. A duplicate ALERT_TOPIC definition once made
+    publish_display retain a bare "1" on baby/alert, which both broke the
+    device LED and put non-JSON on the bus HA notifies from."""
+    from app.mqtt import MqttBridge, ALERT_TOPIC, DEVICE_ALERT_TOPIC
+
+    assert ALERT_TOPIC == "baby/alert"
+    assert DEVICE_ALERT_TOPIC == "baby/remote/alert"
+
+    bridge = MqttBridge(Config())
+    seen = []
+
+    class _Stub:
+        async def publish(self, topic, payload, qos=0, retain=False):
+            seen.append((topic, payload, retain))
+
+    bridge._client = _Stub()
+    asyncio.run(bridge.publish_display({"l1": "a", "l2": "b", "l3": "c", "alert": "1"}))
+    topics = [t for t, _, _ in seen]
+    assert DEVICE_ALERT_TOPIC in topics
+    assert ALERT_TOPIC not in topics
+    assert ("baby/remote/alert", "1", True) in seen

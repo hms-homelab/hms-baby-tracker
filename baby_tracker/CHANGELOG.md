@@ -1,5 +1,17 @@
 # Changelog
 
+## 2026.5.1 - 2026-09-04
+
+- **fixed: the remote's pump-due flag no longer lands on the notifications bus.**
+  `ALERT_TOPIC` was defined twice in `mqtt.py`, so the second definition
+  (`baby/alert`) silently shadowed the first (`baby/remote/alert`) and the
+  display refresh retained a bare `"1"`/`"0"` on `baby/alert`. Two effects, both
+  present since 2026.4.1: the ESP32 remote never got its pump-due LED and chime,
+  and the bus an automation triggers on to notify phones carried a payload with
+  no `kind`, `title` or `message`. The device flag is now `DEVICE_ALERT_TOPIC`
+  and goes where it always should have. If you ran an affected version, clear the
+  stale retained value once: `mosquitto_pub -t baby/alert -r -n`.
+
 ## 2026.5.0 - 2026-09-03
 
 - **added: turn any logged row into a repeating reminder (SDD-007).** Tap a

@@ -36,7 +36,11 @@ NOTE_TOPIC = "baby/note"
 HISTORY_REQUEST_TOPIC = "baby/remote/history/request"
 HISTORY_REPLAY_TOPIC = "baby/remote/history/replay"
 DISPLAY_TOPIC = "baby/remote/display"
-ALERT_TOPIC = "baby/remote/alert"
+# The remote's pump-due LED/chime flag: a retained bare "1"/"0", NOT JSON. Named
+# apart from ALERT_TOPIC below, which used to shadow it (2026.4.1 through
+# 2026.5.0): the flag went out on baby/alert instead, so the device LED went
+# dark and the notification bus carried an unparseable "1".
+DEVICE_ALERT_TOPIC = "baby/remote/alert"
 REMINDER_TOPIC = "baby/remote/reminder"
 ASSESSMENT_TOPIC = "baby/assessment"  # retained {"text","time"} contraction AI assessment
 SUPPLY_REMINDER_TOPIC = "baby/supply/reminder"  # non-retained {"title","message","supply"} (legacy alias of baby/alert)
@@ -253,7 +257,7 @@ class MqttBridge:
             # changes → chime fires once, on the real 0→1 transition. Still retained
             # so a reconnecting device gets the current pump-due state.
             if alert != getattr(self, "_last_alert", None):
-                await self._client.publish(ALERT_TOPIC, alert, qos=0, retain=True)
+                await self._client.publish(DEVICE_ALERT_TOPIC, alert, qos=0, retain=True)
                 self._last_alert = alert
         except aiomqtt.MqttError as e:
             log.warning("publish_display failed: %s", e)
