@@ -13,6 +13,7 @@ import contextlib
 import datetime as dt
 import json
 import logging
+import time
 import uuid
 from pathlib import Path
 from zoneinfo import ZoneInfo
@@ -34,6 +35,12 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(levelname
 log = logging.getLogger("baby")
 
 WEB_DIR = Path(__file__).resolve().parent.parent / "web"
+
+# How long to wait before asking the Supervisor for the add-on slug again after
+# it would not answer. Long enough that a permanently tokenless install is not
+# hammering it on every 30s poll, short enough that a Supervisor which comes back
+# is picked up without an add-on restart.
+SLUG_RETRY_SECONDS = 300
 
 
 class NoCacheStaticFiles(StaticFiles):
@@ -195,23 +202,60 @@ def create_app(cfg: Config | None = None) -> FastAPI:
         _token["v"] = tok
         return tok
 
-    _slug = {"v": None}
+    _slug = {"v": "", "next_try": 0.0, "warned": False}
 
     async def addon_slug() -> str:
-        """This add-on's Supervisor slug (for a deep link to its Configuration).
-        Empty when running standalone / without a Supervisor token."""
-        if _slug["v"] is not None:
+        """This add-on's Supervisor slug, for links into its own pages.
+
+        Empty when running standalone, and empty whenever the Supervisor will
+        not answer — which happens on real installs even with `hassio_api: true`
+        (an add-on is not always given a SUPERVISOR_TOKEN). Everything that uses
+        this treats an empty slug as "no link", so the add-on never depends on
+        the Supervisor being reachable.
+
+        A failure is retried after a cooldown rather than cached for the life of
+        the process, and it is LOGGED. The previous version cached the empty
+        string forever behind a bare `suppress(Exception)`, so a token that went
+        missing looked exactly like a token that was never there, and nothing
+        said so: the Configuration link and the reminder deep link were both
+        quietly dead with no way to tell why.
+        """
+        if _slug["v"]:
             return _slug["v"]
-        _slug["v"] = ""
-        if cfg.supervisor_token:
-            import httpx
-            with contextlib.suppress(Exception):
-                async with httpx.AsyncClient(timeout=8) as c:
-                    r = await c.get("http://supervisor/addons/self/info",
-                                    headers={"Authorization": f"Bearer {cfg.supervisor_token}"})
-                    if r.status_code < 400:
-                        _slug["v"] = (r.json().get("data") or {}).get("slug") or ""
-        return _slug["v"]
+        now = time.monotonic()
+        if now < _slug["next_try"]:
+            return ""
+        _slug["next_try"] = now + SLUG_RETRY_SECONDS
+
+        def _miss(msg, *args):
+            # Say it once at WARNING, then keep it out of the log every retry.
+            log.log(logging.WARNING if not _slug["warned"] else logging.DEBUG,
+                    "add-on slug unresolved (links into the add-on are omitted): " + msg,
+                    *args)
+            _slug["warned"] = True
+            return ""
+
+        if not cfg.supervisor_token:
+            return _miss("no Supervisor token in the environment")
+        import httpx
+        try:
+            async with httpx.AsyncClient(timeout=8) as c:
+                r = await c.get("http://supervisor/addons/self/info",
+                                headers={"Authorization": f"Bearer {cfg.supervisor_token}"})
+        except Exception as e:
+            return _miss("%s: %s", type(e).__name__, e)
+        if r.status_code >= 400:
+            return _miss("supervisor /addons/self/info returned HTTP %s", r.status_code)
+        try:
+            slug = ((r.json() or {}).get("data") or {}).get("slug") or ""
+        except ValueError as e:
+            return _miss("supervisor /addons/self/info gave no JSON: %s", e)
+        if not slug:
+            return _miss("supervisor /addons/self/info carried no slug")
+        _slug["v"] = slug
+        _slug["warned"] = False
+        log.info("add-on slug resolved: %s", slug)
+        return slug
 
     async def reminder_deep_link(rid: int) -> str | None:
         """Where a reminder alert should take you (SDD-008).

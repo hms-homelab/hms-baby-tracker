@@ -1,5 +1,19 @@
 # Changelog
 
+## 2026.5.4 - 2026-09-05
+
+- **fixed: a Supervisor lookup that fails no longer fails silently forever.** The
+  add-on asks the Supervisor for its own slug to build links into its own pages
+  (the Configuration link, and the link on a reminder alert). That lookup was
+  wrapped in a bare exception suppressor and its empty result cached for the life
+  of the process, so on an install where the Supervisor hands the add-on no
+  token — which happens even with `hassio_api: true` — every such link was
+  quietly dead, indistinguishable from running standalone, with nothing in the
+  log to say why. The failure is now logged once with its reason, and retried
+  every five minutes instead of being cached, so a Supervisor that starts
+  answering is picked up without restarting the add-on. Nothing depends on the
+  lookup succeeding: an empty slug still just means "no link".
+
 ## 2026.5.3 - 2026-09-05
 
 - **fixed: the reminder link now actually opens the app.** 2026.5.2 pointed it at
